@@ -8,15 +8,23 @@ Este proyecto está diseñado para integrar funcionalidades de gestión de docum
 ```plaintext
 proyecto_elektra/
 │
+├── archivos_dummy/            # Carpeta con archivos de prueba
+│   ├── archivo_nuevo1.csv     # Ejemplo de archivo CSV
+│   └── archivo_nuevo2.csv     # Ejemplo de archivo CSV
+│
+├── data/                      # Carpeta para almacenar PDFs y otros archivos
+│   └── pdf.pdf                # Ejemplo de archivo PDF
+│
 ├── funciones/                 # Módulo con funciones específicas
 │   ├── __init__.py            # Archivo para definir el módulo como paquete
 │   ├── pdf_extractor.py       # Funciones para extracción de datos desde PDFs
 │   └── watson_discovery.py    # Funciones para interactuar con Watson Discovery
 │
+├── .env                       # Archivo de variables de entorno (no subir a git)
+├── .gitignore                 # Archivo para ignorar archivos en el control de versiones
 ├── main.py                    # Archivo principal para ejecutar el proyecto
 ├── README.md                  # Este archivo de documentación
-├── requirements.txt           # Archivo para instalar dependencias
-└── data/                      # Carpeta para almacenar PDFs y otros archivos
+└── requirements.txt           # Archivo para instalar dependencias
 ```
 
 ## Instalación
@@ -50,12 +58,12 @@ pip install -r requirements.txt
 
 ### 1. Configurar credenciales para Watson Discovery
 
-Antes de ejecutar el proyecto, asegúrate de haber configurado las credenciales de IBM Watson Discovery en el archivo `watson_discovery.py`:
+Antes de ejecutar el proyecto, asegúrate de haber configurado las credenciales de IBM Watson Discovery en el archivo `.env`:
 
-- **api_key**: Llave API de IBM Watson Discovery.
-- **service_url**: URL del servicio.
-- **project_id**: ID del proyecto en Watson Discovery.
-- **collection_id**: ID de la colección en Watson Discovery.
+- **API_KEY**: Llave API de IBM Watson Discovery.
+- **SERVICE_URL**: URL del servicio.
+- **PROJECT_ID**: ID del proyecto en Watson Discovery.
+- **COLLECTION_ID**: ID de la colección en Watson Discovery.
 
 ### 2. Ejecutar el proyecto
 
@@ -68,18 +76,8 @@ python main.py
 Este archivo principal realiza las siguientes acciones:
 
 1. **Eliminar documentos de una colección**: Elimina todos los documentos existentes en la colección configurada de IBM Watson Discovery.
-2. **Subir archivos Excel**: Sube todos los archivos `.xls` y `.xlsx` encontrados en la carpeta especificada a la colección de Watson Discovery.
+2. **Subir archivos Excel**: Sube todos los archivos `.csv` encontrados en la carpeta especificada a la colección de Watson Discovery.
 3. **Procesar archivos PDF**: Extrae información de un archivo PDF y lo procesa para obtener datos como SKUs y vigencias.
-
-### 3. Personalización
-
-Puedes cambiar la ruta de la carpeta de archivos Excel y el archivo PDF dentro del archivo `main.py`:
-
-```python
-carpeta_excel = '/ruta/a/tu/carpeta_de_excel'
-pdf = './ruta/a/tu/pdf.pdf'
-output = './ruta/a/tu/salida'
-```
 
 ## Dependencias
 
@@ -104,7 +102,7 @@ Este módulo contiene funciones para interactuar con IBM Watson Discovery. Las p
 - `eliminar_documentos()`: Elimina todos los documentos de una colección.
 - `añadir_documento()`: Añade un documento (archivo) a la colección de Watson Discovery.
 - `obtener_estado_documento()`: Consulta el estado de un documento en la colección.
-- `subir_archivos_de_carpeta()`: Sube todos los archivos Excel de una carpeta a la colección.
+- `subir_archivos_de_carpeta()`: Sube todos los archivos CSV de una carpeta a la colección.
 
 ### `pdf_extractor.py`
 
@@ -112,6 +110,13 @@ Este módulo contiene funciones para extraer información de un archivo PDF. Las
 
 - `extraer_informacion()`: Extrae texto de un PDF y busca patrones como SKU y vigencias.
 - `guardar_en_csv()`: Guarda los datos extraídos en un archivo CSV.
+
+## .gitignore
+
+Este proyecto incluye un archivo `.gitignore` para evitar subir al repositorio archivos innecesarios como:
+- Entornos virtuales
+- Archivos de entorno (`.env`)
+- Archivos generados por el sistema o editores de texto
 
 ## Licencia
 
