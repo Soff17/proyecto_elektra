@@ -1,0 +1,4 @@
+ibm-watson
+requests
+PyMuPDF
+python-dotenv

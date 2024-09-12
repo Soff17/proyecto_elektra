@@ -1,0 +1,69 @@
+# Entornos virtuales
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# Archivos de entorno
+.env
+
+# Archivos de dependencias
+*.py[cod]
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+wheels/
+
+# Archivos de logs
+*.log
+
+# Directorios de IDEs y editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Archivos generados por sistemas operativos
+.DS_Store
+Thumbs.db
+
+# Archivos de Python
+*.pyo
+*.pyd
+
+# Archivos de Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Archivos relacionados con empaquetado
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Archivos relacionados con cobertura de pruebas
+htmlcov/
+.coverage
+.tox/
+.nox/
+.cache
+.pytest_cache/
+
+# Archivos relacionados con documentación
+docs/_build/
+
+# Archivos relacionados con distribuciones
+.Python
+lib/
+bin/
+include/
+scripts/
+share/
+
+# Otros
+*.swp
+*~
