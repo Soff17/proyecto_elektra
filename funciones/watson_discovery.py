@@ -38,7 +38,7 @@ def eliminar_documento(doc_id):
 # Función para eliminar todos los documentos de una colección en paralelo
 def eliminar_documentos():
     # Paginar la consulta para obtener todos los documentos
-    page_limit = 50
+    page_limit = 100
     offset = 0 # Definición del punto de inicio para obtener resultados
     total_documents = 1
 
@@ -105,6 +105,6 @@ def subir_archivos_de_carpeta(carpeta):
         if tipo_contenido is None:
             tipo_contenido = 'application/octet-stream'  # Tipo por defecto si no se reconoce
         print(f"Subiendo {archivo} con tipo de contenido {tipo_contenido}...")
-        # Se sube el archivo.
+        # Subir el archivo completo a Watson Discovery
         document_id = añadir_documento(ruta_archivo, archivo, tipo_contenido)
         obtener_estado_documento(document_id)
