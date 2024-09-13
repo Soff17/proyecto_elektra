@@ -1,4 +1,5 @@
 ibm-watson
+ibm-cloud-sdk-core
 requests
 PyMuPDF
 python-dotenv
