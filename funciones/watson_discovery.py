@@ -1,7 +1,9 @@
 import os
+import mimetypes
 from ibm_watson import DiscoveryV2
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from dotenv import load_dotenv
+import concurrent.futures
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -20,28 +22,50 @@ discovery = DiscoveryV2(
 )
 discovery.set_service_url(service_url)
 
-# Función para eliminar todos los documentos de una colección
-def eliminar_documentos():
-    # Consulta para obtener todos los documentos en la colección
-    query_response = discovery.query(
-        project_id=project_id,
-        collection_ids=[collection_id],
-    ).get_result()
-    print(query_response)
+# Función para eliminar un documento individual
+def eliminar_documento(doc_id):
+    # Consulta para eliminar un documento
+    try:
+        discovery.delete_document(
+            project_id=project_id,
+            collection_id=collection_id,
+            document_id=doc_id
+        ).get_result()
+        print(f"Documento con ID {doc_id} eliminado exitosamente.")
+    except Exception as e:
+        print(f"Error al eliminar documento con ID {doc_id}: {str(e)}")
 
-    # Verifica si hay documentos en la colección
-    if 'results' in query_response:
-        # Por cada documento en la colección presente en results
-        for document in query_response['results']:
-            # Toma su identificador único para eliminarlo.
-            doc_id = document['document_id']
-            print(f"Eliminando documento con ID: {doc_id}")
-            # Consulta para eliminar el documento de la colección.
-            discovery.delete_document(
-                project_id=project_id,
-                collection_id=collection_id,
-                document_id=doc_id
-            ).get_result()
+# Función para eliminar todos los documentos de una colección en paralelo
+def eliminar_documentos():
+    # Paginar la consulta para obtener todos los documentos
+    page_limit = 50
+    offset = 0 # Definición del punto de inicio para obtener resultados
+    total_documents = 1
+
+    while offset < total_documents:
+        # Consulta para obtener documentos con paginación
+        query_response = discovery.query(
+            project_id=project_id,
+            collection_ids=[collection_id],
+            count=page_limit,
+            offset=offset
+        ).get_result()
+
+        # Actualizar el total de documentos
+        total_documents = query_response.get('matching_results', 0)
+        
+        # Verifica si hay documentos en la colección
+        if 'results' in query_response:
+            # Lista de IDs de documentos a eliminar
+            document_ids = [doc['document_id'] for doc in query_response['results']]
+
+            # Eliminar los documentos en paralelo
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [executor.submit(eliminar_documento, doc_id) for doc_id in document_ids]
+                for future in concurrent.futures.as_completed(futures):
+                    future.result()  # Procesa los resultados de las tareas
+
+        offset += page_limit
 
 # Función para añadir un documento a la colección
 def añadir_documento(ruta_archivo, nombre_archivo, tipo_contenido):
@@ -74,12 +98,13 @@ def obtener_estado_documento(document_id):
 def subir_archivos_de_carpeta(carpeta):
     # Recorre todos los archivos en la carpeta.
     for archivo in os.listdir(carpeta):
-        if archivo.endswith(".csv"):
-            # Se obtiene ruta completa
-            ruta_archivo = os.path.join(carpeta, archivo)
-            # Se establece tipo de contenido
-            tipo_contenido = 'text/csv'
-            print(f"Subiendo {archivo}...")
-            # Se sube el archivo.
-            document_id = añadir_documento(ruta_archivo, archivo, tipo_contenido)
-            obtener_estado_documento(document_id)
+        # Se obtiene ruta completa
+        ruta_archivo = os.path.join(carpeta, archivo)
+        # Se establece tipo de contenido
+        tipo_contenido, _ = mimetypes.guess_type(ruta_archivo)
+        if tipo_contenido is None:
+            tipo_contenido = 'application/octet-stream'  # Tipo por defecto si no se reconoce
+        print(f"Subiendo {archivo} con tipo de contenido {tipo_contenido}...")
+        # Se sube el archivo.
+        document_id = añadir_documento(ruta_archivo, archivo, tipo_contenido)
+        obtener_estado_documento(document_id)
