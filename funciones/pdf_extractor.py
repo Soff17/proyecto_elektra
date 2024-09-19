@@ -25,14 +25,16 @@ def nombre_del_producto(texto, font_size, font_flags):
         return True
     return False
 
-def extraer_images(page, output_dir, doc):
+def extraer_images(page_num, page, output_dir, doc):
     images = page.get_images(full=True)
     for img_index, img in enumerate(images):
+        print (f"Imagen: {img_index}")
+        #print (f"img: {img}, img[0]: {img[0]}")
         xref = img[0]
         base_image = doc.extract_image(xref)
         image_bytes = base_image["image"]
 
-        image_filename = f"imagen_{img_index + 1}.png"
+        image_filename = f"{page_num}_imagen_{img_index + 1}.png"
         image_path = f"{output_dir}/{image_filename}"
 
         with open(image_path, "wb") as image_file:
@@ -42,14 +44,28 @@ def extraer_images(page, output_dir, doc):
 def extraer_urls(page):
     return
 
-def extraer_informacion(page):
+def extraer_informacion(page, page_num, output_images):
     print("Se está extrayendo el texto...")
 
     blocks = page.get_text("dict",sort=True)['blocks']
     text_buffer = ''
     fin_produto = False
+    count = 0
 
     for block in blocks:
+        if 'image' in block:
+            if block['size'] > 14000:
+                print("\n---------------")
+                print(count)
+                print (block['size'])
+                print("---------------")
+                #print(block['bbox'])
+                image_bytes = block['image']
+                image_filename = f"{page_num}_imagen_{count}.png"
+                image_path = f"{output_images}/{image_filename}"
+                count = count + 1
+                with open(image_path, "wb") as image_file:
+                    image_file.write(image_bytes)
         if 'lines' in block:
             for line in block['lines']:
                 for span in line['spans']:
@@ -91,7 +107,7 @@ def extraer_informacion(page):
                     text_buffer = text
 
 def guardar_en_csv(output_path, name_file):
-    print("Se está guardando la información en el CSV...")
+    print(f"Se está guardando la información en el CSV de {name_file}...")
 
     csv_path = f"{output_path}/{name_file}.csv"
     with open(csv_path, mode='w', newline='', encoding='utf-8') as file:
@@ -109,11 +125,12 @@ def guardar_en_csv(output_path, name_file):
                 writer.writerow([name_file, subtitulo, content, sku, vigencia])
 
 
-def procesar_pdf(pdf_path, output_dir):
+def procesar_pdf(pdf_path, output_archivos, output_imagenes):
     doc = fitz.open(pdf_path)
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
-        extraer_informacion(page)
-        guardar_en_csv(output_dir, titulos[page_num])
-        extraer_images(page, output_dir, doc)
+        extraer_informacion(page, page_num, output_imagenes)
+        #if page_num <= (len(titulos)-1):
+            #guardar_en_csv(output_archivos, titulos[page_num])
+            #extraer_images(page_num,page, output_imagenes, doc)

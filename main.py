@@ -8,9 +8,10 @@ def main():
     #wd.eliminar_documentos()
 
     # Procesar PDF de catálogo
-    pdf = './data/pdf.pdf'
-    output = './archivos_dummy'
-    pe.procesar_pdf(pdf, output)
+    pdf = './data/folleto.pdf'
+    output_arhivos = './archivos_dummy'
+    output_imagenes = './imagenes'
+    pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
 
     # Subir archivos Excel desde una carpeta a Watson Discovery
     #carpeta_excel = './data'
