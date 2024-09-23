@@ -1,136 +1,122 @@
 import fitz
 import re
-import csv
-import base64
-import os
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
 
 titulos = []
 subtitulos = []
-context = [""]
-vigencias = []
-skus = []
-imagenes = []
+info = [""]
 urls = []
+skus = []
+vigencias = []
 
-def nombre_de_categoria(texto, font_size, font_flags):
+def nombre_de_categoria(font_size, font_flags):
     if font_size == 58 and font_flags == 20:
         return True
     return False
 
-def nombre_del_producto(texto, font_size, font_flags):
+def nombre_del_producto(font_size, font_flags):
     if (font_size == 35.0 or font_size == 40.0) and (font_flags == 20 or font_flags == 4):
         return True
     return False
 
-def extraer_images(page_num, page, output_dir, doc):
-    images = page.get_images(full=True)
-    for img_index, img in enumerate(images):
-        print (f"Imagen: {img_index}")
-        #print (f"img: {img}, img[0]: {img[0]}")
-        xref = img[0]
+def extraer_imagenes_orden(output_imagenes, page, doc):
+    images = page.get_image_info(hashes=True, xrefs=True)
+    imagenes = []
+
+    for img in images:
+        xref = img['xref']
+        if xref > 0:
+            if img['width'] > 500 and img['height'] > 500:
+                bbox_img = img['bbox']
+                imagenes.append((xref, bbox_img))
+    
+    images_sorted = sorted(imagenes, key=lambda img: img[1][3], reverse=False)
+
+    count = 1
+    for xref, bbox in images_sorted:
         base_image = doc.extract_image(xref)
         image_bytes = base_image["image"]
-
-        image_filename = f"{page_num}_imagen_{img_index + 1}.png"
-        image_path = f"{output_dir}/{image_filename}"
-
-        with open(image_path, "wb") as image_file:
+        ext = base_image["ext"]
+        
+        path = f"./{output_imagenes}/imagenOrdenada_{count}.{ext}"
+        with open(path, "wb") as image_file:
             image_file.write(image_bytes)
+        count += 1
 
+def extraer_informacion(page, doc):
+    blocks = page.get_text("dict",sort=True)["blocks"]
+    text_buffer = ""
+    fin_producto = False
 
-def extraer_urls(page):
-    return
+    # subtitulos.clear()
+    # info = [""]
+    # urls.clear()
+    # skus.clear()
+    # vigencias.clear()
 
-def extraer_informacion(page, page_num, output_images):
-    print("Se está extrayendo el texto...")
-
-    blocks = page.get_text("dict",sort=True)['blocks']
-    text_buffer = ''
-    fin_produto = False
-    count = 0
-
-    for block in blocks:
-        if 'image' in block:
-            if block['size'] > 14000:
-                print("\n---------------")
-                print(count)
-                print (block['size'])
-                print("---------------")
-                #print(block['bbox'])
-                image_bytes = block['image']
-                image_filename = f"{page_num}_imagen_{count}.png"
-                image_path = f"{output_images}/{image_filename}"
-                count = count + 1
-                with open(image_path, "wb") as image_file:
-                    image_file.write(image_bytes)
+    for index,block in enumerate(blocks):
         if 'lines' in block:
             for line in block['lines']:
                 for span in line['spans']:
 
                     text = span['text'].strip()
-                    font_size = span['size']
-                    font_flags = span['flags']
-
-                    #Extraer el Titulo de la categoria
-                    if nombre_de_categoria(text, font_size, font_flags):
+                    text_size = span['size']
+                    text_flags = span['flags']
+                    
+                    #Get nombre de categoria
+                    if nombre_de_categoria(text_size, text_flags):
                         titulos.append(text)
-                
-                    #Extraer los subtitulos
-                    elif nombre_del_producto(text, font_size, font_flags):
+                    
+                    #Get nombre de prodcuto
+                    elif nombre_del_producto(text_size, text_flags):
                         if text_buffer in subtitulos:
-                            word = ' ' + text
-                            subtitulos[len(subtitulos)-1] += word
+                            subtitulos[len(subtitulos)-1] += " " + text
                         else:
                             subtitulos.append(text)
-
-                    #Extraer los Skus
+                    
+                    #Get SKUs
                     elif sku_pattern.findall(text):
                         skus.append(text)
-
-                    #Extraer las vigencias
+                    
+                    #Get Vigencias
                     elif vigencia_pattern.findall(text):
                         vigencias.append(text)
-                        fin_produto = True
+                        fin_producto = True
 
-                    #Extraer el context
                     else:
-                        if fin_produto:
-                            context.append(text)
-                            fin_produto = False
+                        if fin_producto:
+                            info.append(text)
+                            fin_producto = False
                         else:
                             word = ' ' + text
-                            context[len(context)-1] += word
-    
+                            info[len(info)-1] += word
+                    
                     text_buffer = text
 
-def guardar_en_csv(output_path, name_file):
-    print(f"Se está guardando la información en el CSV de {name_file}...")
-
-    csv_path = f"{output_path}/{name_file}.csv"
-    with open(csv_path, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-
-        writer.writerow(["Categoria", "Productos", "Context", "SKU", "Vigencia"])
-
-        for i in range(max(len(subtitulos), len(context), len(skus), len(vigencias))):
-            sku = skus[i] if i < len(skus) else ""
-            vigencia = vigencias[i] if i < len(vigencias) else ""
-            subtitulo = subtitulos[i] if i < len(subtitulos) else ""
-            content = context[i] if i < len(context) else ""
-            
-            if sku: 
-                writer.writerow([name_file, subtitulo, content, sku, vigencia])
-
-
+def guardar_informacion(output_arhivos, name_file, data):
+    filepath = f"./{output_arhivos}/{name_file}.txt"
+    with open(filepath, 'w') as archivo:
+        for dato in data:
+            archivo.write(dato + "\n")
+        
+   
 def procesar_pdf(pdf_path, output_archivos, output_imagenes):
     doc = fitz.open(pdf_path)
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
-        extraer_informacion(page, page_num, output_imagenes)
-        #if page_num <= (len(titulos)-1):
-            #guardar_en_csv(output_archivos, titulos[page_num])
-            #extraer_images(page_num,page, output_imagenes, doc)
+        extraer_imagenes_orden(output_imagenes, page, doc)
+        extraer_informacion(page, doc)
+        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias))):
+            sku = skus[i] if i < len(skus) else ""
+            vigencia = vigencias[i] if i < len(vigencias) else ""
+            subtitulo = subtitulos[i] if i < len(subtitulos) else ""
+            content = info[i] if i < len(info) else ""
+            if sku:
+                data = [subtitulo, content, vigencia, sku]
+                title_file = f"Dummy{i}"
+                guardar_informacion(output_archivos, title_file, data)
+        
+            
