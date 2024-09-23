@@ -8,7 +8,7 @@ def main():
     #wd.eliminar_documentos()
 
     # Procesar PDF de catálogo
-    pdf = './data/folleto.pdf'
+    pdf = './data/pdf.pdf'
     output_arhivos = './archivos_dummy'
     output_imagenes = './imagenes'
     pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
