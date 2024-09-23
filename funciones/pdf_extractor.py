@@ -21,30 +21,6 @@ def nombre_del_producto(font_size, font_flags):
         return True
     return False
 
-def extraer_imagenes_orden(output_imagenes, page, doc):
-    images = page.get_image_info(hashes=True, xrefs=True)
-    imagenes = []
-
-    for img in images:
-        xref = img['xref']
-        if xref > 0:
-            if img['width'] > 500 and img['height'] > 500:
-                bbox_img = img['bbox']
-                imagenes.append((xref, bbox_img))
-    
-    images_sorted = sorted(imagenes, key=lambda img: img[1][3], reverse=False)
-
-    count = 1
-    for xref, bbox in images_sorted:
-        base_image = doc.extract_image(xref)
-        image_bytes = base_image["image"]
-        ext = base_image["ext"]
-        
-        path = f"./{output_imagenes}/imagenOrdenada_{count}.{ext}"
-        with open(path, "wb") as image_file:
-            image_file.write(image_bytes)
-        count += 1
-
 def extraer_informacion(page, doc):
     blocks = page.get_text("dict",sort=True)["blocks"]
     text_buffer = ""
@@ -78,7 +54,9 @@ def extraer_informacion(page, doc):
                     
                     #Get SKUs
                     elif sku_pattern.findall(text):
-                        skus.append(text)
+                        sku = sku_pattern.findall(text)[0]
+                        sku = sku.replace("."," ")
+                        skus.append(sku)
                     
                     #Get Vigencias
                     elif vigencia_pattern.findall(text):
@@ -95,6 +73,35 @@ def extraer_informacion(page, doc):
                     
                     text_buffer = text
 
+def extraer_imagenes_orden(output_imagenes, page, doc):
+    images = page.get_image_info(hashes=True, xrefs=True)
+    imagenes = []
+
+    for img in images:
+        xref = img['xref']
+        if xref > 0:
+            if img['width'] > 500 and img['height'] > 500:
+                bbox_img = img['bbox']
+                imagenes.append((xref, bbox_img))
+    
+    images_sorted = sorted(imagenes, key=lambda img: img[1][3], reverse=False)
+
+    count = 0
+    for xref, bbox in images_sorted:
+        base_image = doc.extract_image(xref)
+        image_bytes = base_image["image"]
+        ext = base_image["ext"]
+        
+        
+        if (len(skus)) > count:
+            print(skus[count])
+            path = f"./{output_imagenes}/{skus[count]}.{ext}"
+        else:
+            path = f"./{output_imagenes}/producto_{count+1}.{ext}"
+        with open(path, "wb") as image_file:
+            image_file.write(image_bytes)
+        count += 1
+
 def guardar_informacion(output_arhivos, name_file, data):
     filepath = f"./{output_arhivos}/{name_file}.txt"
     with open(filepath, 'w') as archivo:
@@ -107,13 +114,16 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
-        extraer_imagenes_orden(output_imagenes, page, doc)
+
         extraer_informacion(page, doc)
+        extraer_imagenes_orden(output_imagenes, page, doc)
+
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             content = info[i] if i < len(info) else ""
+
             if sku:
                 data = [subtitulo, content, vigencia, sku]
                 title_file = f"Dummy{i}"
