@@ -6,3 +6,4 @@ python-dotenv
 fastapi
 uvicorn
 flask-cors
+google-cloud-storage
