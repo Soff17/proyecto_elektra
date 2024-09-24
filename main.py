@@ -3,6 +3,11 @@ from flask_cors import CORS  # Importar CORS
 #from funciones import watson_discovery as wd
 from funciones import pdf_extractor as pe
 from funciones import image_storage as st
+from dotenv import load_dotenv
+import os
+
+# Cargar las variables de entorno desde el archivo .env
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -17,7 +22,7 @@ bucket_name = 'nds_test'
 carpeta_en_bucket = 'imagenes_subidas'
 
 # Definición de token
-TOKEN_VALIDO = "654321_NDS"
+TOKEN_VALIDO = os.getenv('TOKEN_VALIDO')
 
 # Middleware para verificar el token en cada solicitud
 def verificar_token():
