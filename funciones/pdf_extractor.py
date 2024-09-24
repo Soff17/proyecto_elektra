@@ -107,10 +107,17 @@ def extraer_imagenes_orden(output_imagenes, page, doc):
         count += 1
 
 def get_urls(page):
-    return
+    print("Obteniendo las urls...")
+    links = page.get_links()
+    for link in links:
+        url = link['uri']
+        url = url.replace("https://www.elektra.mx/", "")
+        url = url.replace(":","-")
+        urls.append(url)
 
 def guardar_informacion(output_arhivos, name_file, data):
-    filepath = f"./{output_arhivos}/{name_file}.txt"
+    filepath = f"{output_arhivos}/{name_file}.txt"
+    print(filepath)
     with open(filepath, "w", encoding="utf-8") as archivo:
         for dato in data:
 
@@ -122,21 +129,26 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
-
+        subtitulos.clear()
+        info = [""]
+        urls.clear()
+        skus.clear()
+        vigencias.clear()
         extraer_informacion(page)
+        get_urls(page)
         extraer_imagenes_orden(output_imagenes, page, doc)
         
         print("Guardando la informacion...")
-        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias))):
+        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             content = info[i] if i < len(info) else ""
+            url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
 
             if sku:
                 sku = "Sku: **" + sku + "**"
                 data = [subtitulo, sku, content, vigencia]
-                title_file = f"Dummy{i}"
-                guardar_informacion(output_archivos, title_file, data)
+                guardar_informacion(output_archivos, f"{page_num}_Dummy{i}", data)
         
             
