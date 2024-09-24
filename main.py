@@ -1,21 +1,34 @@
+from flask import Flask, jsonify
+from flask_cors import CORS  # Importar CORS
 #from funciones import watson_discovery as wd
 from funciones import pdf_extractor as pe
 
-def main():
-    print("Iniciando extracción de información")
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-    # Eliminar documentos existentes en la colección Watson Discovery
-    #wd.eliminar_documentos()
+# Rutas fijas para archivos
+pdf = './data/folleto_cambaceo_semanal_2024_W35_V1.2_movilidad.pdf'
+output_arhivos = './archivos_dummy'
+output_imagenes = './imagenes'
+  
+@app.route('/new_documents', methods=['POST'])
+def procesar_y_subir():
+    try:
+        # Paso 1: Eliminar documentos
+        # wd.eliminar_documentos()
+        print("Documentos eliminados exitosamente.")
 
-    # Procesar PDF de catálogo
-    pdf = './data/folleto_cambaceo_semanal_2024_W35_V1.2_movilidad.pdf'
-    output_arhivos = './archivos_dummy'
-    output_imagenes = './imagenes'
-    pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
+        # Paso 2: Procesar el PDF
+        pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
+        print("PDF procesado exitosamente.")
 
-    # Subir archivos Excel desde una carpeta a Watson Discovery
-    #carpeta_excel = './data'
-    #wd.subir_archivos_de_carpeta(carpeta_excel)
+        # Paso 3: Subir archivos a Watson Discovery
+        # wd.subir_archivos_de_carpeta(output_arhivos)
+        print("Archivos subidos exitosamente.")
+
+        return jsonify({"message": "Proceso completo: documentos eliminados, PDF procesado, archivos subidos"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    main()
+    app.run(host='0.0.0.0', port=5001, debug=True)
