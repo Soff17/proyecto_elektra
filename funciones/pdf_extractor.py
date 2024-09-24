@@ -21,9 +21,11 @@ def nombre_del_producto(font_size, font_flags):
         return True
     return False
 
-def extraer_informacion(page, doc):
+def extraer_informacion(page):
+    print("Obteniendo el texto...")
     blocks = page.get_text("dict",sort=True)["blocks"]
     text_buffer = ""
+    inicio_producto = False
     fin_producto = False
 
     # subtitulos.clear()
@@ -32,7 +34,7 @@ def extraer_informacion(page, doc):
     # skus.clear()
     # vigencias.clear()
 
-    for index,block in enumerate(blocks):
+    for block in blocks:
         if 'lines' in block:
             for line in block['lines']:
                 for span in line['spans']:
@@ -44,26 +46,28 @@ def extraer_informacion(page, doc):
                     #Get nombre de categoria
                     if nombre_de_categoria(text_size, text_flags):
                         titulos.append(text)
-                    
+
                     #Get nombre de prodcuto
                     elif nombre_del_producto(text_size, text_flags):
                         if text_buffer in subtitulos:
                             subtitulos[len(subtitulos)-1] += " " + text
                         else:
                             subtitulos.append(text)
+                        inicio_producto = True
                     
                     #Get SKUs
                     elif sku_pattern.findall(text):
                         sku = sku_pattern.findall(text)[0]
-                        sku = sku.replace("."," ")
+                        sku = sku.replace(".","")
                         skus.append(sku)
                     
                     #Get Vigencias
                     elif vigencia_pattern.findall(text):
                         vigencias.append(text)
                         fin_producto = True
+                        inicio_producto = False
 
-                    else:
+                    elif inicio_producto:
                         if fin_producto:
                             info.append(text)
                             fin_producto = False
@@ -74,6 +78,7 @@ def extraer_informacion(page, doc):
                     text_buffer = text
 
 def extraer_imagenes_orden(output_imagenes, page, doc):
+    print("Obteniendo las imagenes...")
     images = page.get_image_info(hashes=True, xrefs=True)
     imagenes = []
 
@@ -94,7 +99,6 @@ def extraer_imagenes_orden(output_imagenes, page, doc):
         
         
         if (len(skus)) > count:
-            print(skus[count])
             path = f"./{output_imagenes}/{skus[count]}.{ext}"
         else:
             path = f"./{output_imagenes}/producto_{count+1}.{ext}"
@@ -102,10 +106,14 @@ def extraer_imagenes_orden(output_imagenes, page, doc):
             image_file.write(image_bytes)
         count += 1
 
+def get_urls(page):
+    return
+
 def guardar_informacion(output_arhivos, name_file, data):
     filepath = f"./{output_arhivos}/{name_file}.txt"
-    with open(filepath, 'w') as archivo:
+    with open(filepath, "w", encoding="utf-8") as archivo:
         for dato in data:
+
             archivo.write(dato + "\n")
         
    
@@ -115,9 +123,10 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
 
-        extraer_informacion(page, doc)
+        extraer_informacion(page)
         extraer_imagenes_orden(output_imagenes, page, doc)
-
+        
+        print("Guardando la informacion...")
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
@@ -125,7 +134,8 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
             content = info[i] if i < len(info) else ""
 
             if sku:
-                data = [subtitulo, content, vigencia, sku]
+                sku = "Sku: **" + sku + "**"
+                data = [subtitulo, sku, content, vigencia]
                 title_file = f"Dummy{i}"
                 guardar_informacion(output_archivos, title_file, data)
         
