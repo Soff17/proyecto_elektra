@@ -6,7 +6,7 @@ vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
 
 titulos = []
 subtitulos = []
-info = [""]
+info = []
 urls = []
 skus = []
 vigencias = []
@@ -23,16 +23,11 @@ def nombre_del_producto(font_size, font_flags):
 
 def extraer_informacion(page):
     print("Obteniendo el texto...")
+
     blocks = page.get_text("dict",sort=True)["blocks"]
     text_buffer = ""
     inicio_producto = False
     fin_producto = False
-
-    # subtitulos.clear()
-    # info = [""]
-    # urls.clear()
-    # skus.clear()
-    # vigencias.clear()
 
     for block in blocks:
         if 'lines' in block:
@@ -68,13 +63,13 @@ def extraer_informacion(page):
                         inicio_producto = False
 
                     elif inicio_producto:
-                        if fin_producto:
+                        if fin_producto or len(info) == 0:
                             info.append(text)
                             fin_producto = False
                         else:
                             word = ' ' + text
                             info[len(info)-1] += word
-                    
+    
                     text_buffer = text
 
 def extraer_imagenes_orden(output_imagenes, page, doc):
@@ -113,11 +108,13 @@ def get_urls(page):
         url = link['uri']
         url = url.replace("https://www.elektra.mx/", "")
         url = url.replace(":","-")
+        url = url.replace("/", "-")
+        url = url.replace("?", "-")
+        url = url.replace("%", "-")
         urls.append(url)
 
 def guardar_informacion(output_arhivos, name_file, data):
     filepath = f"{output_arhivos}/{name_file}.txt"
-    print(filepath)
     with open(filepath, "w", encoding="utf-8") as archivo:
         for dato in data:
 
@@ -129,11 +126,13 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
+
         subtitulos.clear()
-        info = [""]
+        info.clear()
         urls.clear()
         skus.clear()
         vigencias.clear()
+
         extraer_informacion(page)
         get_urls(page)
         extraer_imagenes_orden(output_imagenes, page, doc)
@@ -149,6 +148,6 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
             if sku:
                 sku = "Sku: **" + sku + "**"
                 data = [subtitulo, sku, content, vigencia]
-                guardar_informacion(output_archivos, f"{page_num}_Dummy{i}", data)
+                guardar_informacion(output_archivos, url, data)
         
             
