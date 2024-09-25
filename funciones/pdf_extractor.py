@@ -120,7 +120,9 @@ def guardar_informacion(output_arhivos, name_file, data):
 
             archivo.write(dato + "\n")
         
-   
+def particion_pdf():
+    return
+
 def procesar_pdf(pdf_path, output_archivos, output_imagenes):
     doc = fitz.open(pdf_path)
 
@@ -146,8 +148,8 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
 
             if sku:
-                sku = "Sku: **" + sku + "**"
-                data = [subtitulo, sku, content, vigencia]
-                guardar_informacion(output_archivos, url, data)
+                sku_num = "Sku: " + sku
+                data = [subtitulo, sku_num, content, vigencia]
+                guardar_informacion(output_archivos, f"{sku} {url}", data)
         
             
