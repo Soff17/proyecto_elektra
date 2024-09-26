@@ -1,10 +1,12 @@
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS  # Importar CORS
+#from funciones import watson_discovery as wd
 from funciones import pdf_extractor as pe
 from funciones import image_storage as st
 from funciones.token import verificar_token, generate_token 
 from dotenv import load_dotenv
 import os
+
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -13,7 +15,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Rutas fijas para archivos
-pdf = './data/folleto_cambaceo_semanal_2024_W35_V1.2_movilidad.pdf'
+pdf = './data/folleto.pdf'
 output_arhivos = './archivos_dummy'
 output_imagenes = './imagenes'
 
@@ -55,6 +57,7 @@ def procesar_y_subir():
         print("Imágenes subidas exitosamente a Google Cloud Storage.")
 
         return jsonify({"message": "Proceso completo: documentos eliminados, PDF procesado, archivos e imágenes subidas"}), 200
+      
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
