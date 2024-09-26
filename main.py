@@ -7,7 +7,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Rutas fijas para archivos
-pdf = './data/folleto_cambaceo_semanal_2024_W35_V1.2_movilidad.pdf'
+pdf = './data/folleto.pdf'
 output_arhivos = './archivos_dummy'
 output_imagenes = './imagenes'
   
@@ -17,6 +17,9 @@ def procesar_y_subir():
         # Paso 1: Eliminar documentos
         # wd.eliminar_documentos()
         print("Documentos eliminados exitosamente.")
+
+        # Procesar PDF de catálogo
+        pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
 
         # Paso 2: Procesar el PDF
         pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
