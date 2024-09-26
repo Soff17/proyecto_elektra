@@ -1,5 +1,6 @@
 import fitz
 import re
+import os
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
@@ -12,7 +13,7 @@ skus = []
 vigencias = []
 
 def nombre_de_categoria(font_size, font_flags):
-    if font_size == 58 and font_flags == 20:
+    if (font_size > 43) and font_flags == 20:
         return True
     return False
 
@@ -22,8 +23,6 @@ def nombre_del_producto(font_size, font_flags):
     return False
 
 def extraer_informacion(page):
-    print("Obteniendo el texto...")
-
     blocks = page.get_text("dict",sort=True)["blocks"]
     text_buffer = ""
     inicio_producto = False
@@ -37,10 +36,17 @@ def extraer_informacion(page):
                     text = span['text'].strip()
                     text_size = span['size']
                     text_flags = span['flags']
+
+                    # print("\n------------")
+                    # print(f"Texto: {text} \nSize: {text_size} \nFlags: {text_flags}")
+                    # print("-------------")
                     
                     #Get nombre de categoria
                     if nombre_de_categoria(text_size, text_flags):
-                        titulos.append(text)
+                        if text_buffer in titulos:
+                            titulos[len(titulos)-1] += " " + text
+                        else:
+                            titulos.append(text)
 
                     #Get nombre de prodcuto
                     elif nombre_del_producto(text_size, text_flags):
@@ -73,7 +79,6 @@ def extraer_informacion(page):
                     text_buffer = text
 
 def extraer_imagenes_orden(output_imagenes, page, doc):
-    print("Obteniendo las imagenes...")
     images = page.get_image_info(hashes=True, xrefs=True)
     imagenes = []
 
@@ -102,7 +107,6 @@ def extraer_imagenes_orden(output_imagenes, page, doc):
         count += 1
 
 def get_urls(page):
-    print("Obteniendo las urls...")
     links = page.get_links()
     for link in links:
         url = link['uri']
@@ -114,21 +118,36 @@ def get_urls(page):
         urls.append(url)
 
 def guardar_informacion(output_arhivos, name_file, data):
-    filepath = f"{output_arhivos}/{name_file}.txt"
+    print(f"LEN: {len(name_file)}")
+    if len(name_file) > 185:
+        filepath = f"{output_arhivos}/dummy{len(name_file)}.txt"
+    else:
+        filepath = f"{output_arhivos}/{name_file}.txt"
     with open(filepath, "w", encoding="utf-8") as archivo:
         for dato in data:
-
             archivo.write(dato + "\n")
         
-def particion_pdf():
-    return
+def particion_pdf(pdf_path, output_archivos):
+    doc = fitz.open(pdf_path)
+
+    for num_page in range(doc.page_count):
+        doc_pagina = fitz.open()
+        
+        doc_pagina.insert_pdf(doc, from_page=num_page, to_page=num_page)
+        nombre_archivo_salida = f"{output_archivos}/pagina_{num_page + 1}.pdf"
+        doc_pagina.save(nombre_archivo_salida)
+    doc_pagina.close()
+
 
 def procesar_pdf(pdf_path, output_archivos, output_imagenes):
     doc = fitz.open(pdf_path)
+    ruta_base = os.getcwd()
+    
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
 
+        titulos.clear()
         subtitulos.clear()
         info.clear()
         urls.clear()
@@ -138,8 +157,10 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
         extraer_informacion(page)
         get_urls(page)
         extraer_imagenes_orden(output_imagenes, page, doc)
+
+        ruta_directorio = os.path.join(ruta_base, 'archivos_dummy', f'{titulos[0]}')
+        os.makedirs(ruta_directorio, exist_ok=True)
         
-        print("Guardando la informacion...")
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
@@ -150,6 +171,6 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
             if sku:
                 sku_num = "Sku: " + sku
                 data = [subtitulo, sku_num, content, vigencia]
-                guardar_informacion(output_archivos, f"{sku} {url}", data)
+                guardar_informacion(ruta_directorio, f"{sku} {url}", data)
         
             
