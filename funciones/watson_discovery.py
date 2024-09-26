@@ -123,3 +123,91 @@ def subir_archivos_de_carpeta(carpeta):
         
         for future in concurrent.futures.as_completed(futures):
             future.result()
+
+# Función para contar el número total de documentos en una colección
+def contar_documentos():
+    try:
+        # Hacer la consulta para obtener el número total de documentos
+        query_response = discovery.query(
+            project_id=project_id,
+            collection_ids=[collection_id],
+            count=0  # No necesitamos traer ningún documento, solo contar
+        ).get_result()
+
+        # Obtener el número total de documentos
+        total_documents = query_response.get('matching_results', 0)
+        print(f"Total de documentos en la colección: {total_documents}")
+        return total_documents
+    except Exception as e:
+        print(f"Error al contar los documentos: {str(e)}")
+        return None
+
+# Función para descargar un documento dado su document_id y guardar su contenido
+def descargar_documento(document_id, carpeta_descarga):
+    try:
+        # Ejecutar consulta para obtener el documento con detalles
+        document_data = discovery.query(
+            project_id=project_id,
+            collection_ids=[collection_id],
+            filter=f"document_id::{document_id}"
+        ).get_result()
+
+        # Verificar si hay resultados y obtener el nombre del documento
+        if 'results' in document_data and len(document_data['results']) > 0:
+            doc = document_data['results'][0]
+            texto_documento = doc.get('text', '')
+            nombre_original = doc.get('extracted_metadata', {}).get('filename', f'documento_{document_id}')
+
+            # Sanitizar el nombre del archivo
+            nombre_archivo_sanitizado = sanitizar_nombre(nombre_original)
+
+            # Si el texto es una lista, convertirla a una cadena
+            if isinstance(texto_documento, list):
+                texto_documento = "\n".join(texto_documento)
+
+            if texto_documento:
+                ruta_descarga = os.path.join(carpeta_descarga, f"{nombre_archivo_sanitizado}.txt")
+
+                # Guardar el contenido del documento en un archivo .txt
+                with open(ruta_descarga, 'w', encoding='utf-8') as file:
+                    file.write(texto_documento)
+
+                print(f"Documento {document_id} descargado como {ruta_descarga}")
+            else:
+                print(f"El documento {document_id} no tiene texto para descargar.")
+        else:
+            print(f"No se encontró el documento {document_id} o no tiene contenido descargable.")
+
+    except Exception as e:
+        print(f"Error al descargar el documento {document_id}: {str(e)}")
+
+# Función para descargar todos los documentos de la colección
+def descargar_todos_los_documentos(carpeta_descarga):
+    if not os.path.exists(carpeta_descarga):
+        os.makedirs(carpeta_descarga)
+
+    page_limit = 100
+    offset = 0
+    total_documents = 1
+
+    while offset < total_documents:
+        query_response = discovery.query(
+            project_id=project_id,
+            collection_ids=[collection_id],
+            count=page_limit,
+            offset=offset
+        ).get_result()
+
+        total_documents = query_response.get('matching_results', 0)
+        
+        if 'results' in query_response:
+            document_ids = [doc['document_id'] for doc in query_response['results']]
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [executor.submit(descargar_documento, doc_id, carpeta_descarga) for doc_id in document_ids]
+                for future in concurrent.futures.as_completed(futures):
+                    future.result()
+
+        offset += page_limit
+
+
