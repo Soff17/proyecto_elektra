@@ -44,7 +44,7 @@ def procesar_y_subir():
             total_documentos = wd.contar_documentos()
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                # pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
+                pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
                 print("PDF procesado exitosamente.")
                 break
             else:
@@ -52,11 +52,12 @@ def procesar_y_subir():
             time.sleep(5)
 
         # Paso 4: Contar los archivos en la carpeta 'output_arhivos'
-        archivos_en_carpeta = len(os.listdir('./descargas'))
+        archivos_en_carpeta, lista_archivos = wd.contar_archivos_validos(output_arhivos)
         print(f"Archivos en la carpeta '{output_arhivos}': {archivos_en_carpeta}")
+        print(f"Lista de archivos: {lista_archivos}")
 
         # Paso 5: Subir archivos a Watson Discovery
-        wd.subir_archivos_de_carpeta('./descargas')
+        wd.subir_archivos_de_carpeta(output_arhivos)
         print("Archivos subidos exitosamente a Watson Discovery.")
 
         # Paso 6: Esperar hasta que el conteo de documentos en Discovery coincida con los archivos subidos

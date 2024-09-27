@@ -106,6 +106,8 @@ def subir_archivo_en_paralelo(ruta_archivo, archivo):
     
     if document_id:
         obtener_estado_documento(document_id)
+    else:
+        print(f"Error al subir el archivo: {archivo}")
 
 # Función para procesar todos los archivos en una carpeta
 def subir_archivos_de_carpeta(carpeta):
@@ -204,3 +206,8 @@ def descargar_todos_los_documentos(carpeta_descarga):
                     future.result()
 
         offset += page_limit
+
+# Filtrar archivos ocultos o temporales
+def contar_archivos_validos(carpeta):
+    archivos_validos = [f for f in os.listdir(carpeta) if not f.startswith('.') and os.path.isfile(os.path.join(carpeta, f))]
+    return len(archivos_validos), archivos_validos
