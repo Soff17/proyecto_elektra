@@ -37,7 +37,6 @@ def eliminar_documento(doc_id):
             collection_id=collection_id,
             document_id=doc_id
         ).get_result()
-        print(f"Documento con ID {doc_id} eliminado exitosamente.")
     except Exception as e:
         print(f"Error al eliminar documento con ID {doc_id}: {str(e)}")
 
@@ -80,7 +79,6 @@ def añadir_documento(ruta_archivo, nombre_archivo, tipo_contenido):
                 filename=nombre_archivo_sanitizado, 
                 file_content_type=tipo_contenido
             ).get_result()
-            print(f"Documento subido: {response}")
             return response['document_id']
     except Exception as e:
         print(f"Error al subir {nombre_archivo}: {str(e)}")
@@ -94,7 +92,6 @@ def obtener_estado_documento(document_id):
             collection_id=collection_id,
             document_id=document_id
         ).get_result()
-        print(f"Estado del documento con ID {document_id}: {document_status}")
         return document_status
     except Exception as e:
         print(f"Error al obtener estado del documento {document_id}: {str(e)}")
@@ -104,8 +101,6 @@ def subir_archivo_en_paralelo(ruta_archivo, archivo):
     tipo_contenido, _ = mimetypes.guess_type(ruta_archivo)
     if tipo_contenido is None:
         tipo_contenido = 'application/octet-stream'
-    
-    print(f"Subiendo {archivo} con tipo de contenido {tipo_contenido}...")
     
     document_id = añadir_documento(ruta_archivo, archivo, tipo_contenido)
     
@@ -209,5 +204,3 @@ def descargar_todos_los_documentos(carpeta_descarga):
                     future.result()
 
         offset += page_limit
-
-
