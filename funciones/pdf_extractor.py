@@ -36,13 +36,9 @@ def extraer_informacion(page):
                     text = span['text'].strip()
                     text_size = span['size']
                     text_flags = span['flags']
-
-                    # print("\n------------")
-                    # print(f"Texto: {text} \nSize: {text_size} \nFlags: {text_flags}")
-                    # print("-------------")
                     
                     #Get nombre de categoria
-                    if nombre_de_categoria(text_size, text_flags):
+                    if nombre_de_categoria(text_size, text_flags) and inicio_producto == False:
                         if text_buffer in titulos:
                             titulos[len(titulos)-1] += " " + text
                         else:
@@ -118,11 +114,12 @@ def get_urls(page):
         urls.append(url)
 
 def guardar_informacion(output_arhivos, name_file, data):
-    print(f"LEN: {len(name_file)}")
-    if len(name_file) > 185:
-        filepath = f"{output_arhivos}/dummy{len(name_file)}.txt"
-    else:
-        filepath = f"{output_arhivos}/{name_file}.txt"
+    # print(f"LEN: {len(name_file)}")
+    # if len(name_file) > 185:
+    #     filepath = f"{output_arhivos}/dummy{len(name_file)}.txt"
+    # else:
+    #     filepath = f"{output_arhivos}/{name_file}.txt"
+    filepath = f"{output_arhivos}/{name_file}.txt"
     with open(filepath, "w", encoding="utf-8") as archivo:
         for dato in data:
             archivo.write(dato + "\n")
