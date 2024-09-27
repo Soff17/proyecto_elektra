@@ -3,7 +3,7 @@ from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor
 
 def initialize_storage_client():
-    return storage.Client.from_service_account_json('')
+    return storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra/quotes-381505-09ca05ec8b5e.json')
 
 # Función para vaciar el bucket eliminando todos los blobs a la vez
 def empty_bucket(bucket_name):
