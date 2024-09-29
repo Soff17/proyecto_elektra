@@ -53,7 +53,7 @@ def procesar_y_subir():
 
         # Paso 4: Contar los archivos en la carpeta 'output_arhivos'
         archivos_en_carpeta, lista_archivos = wd.contar_archivos_validos(output_arhivos)
-        print(f"Archivos en la carpeta '{output_arhivos}': {archivos_en_carpeta}")
+        print(f"Archivos en la carpeta {output_arhivos}: {archivos_en_carpeta}")
         print(f"Lista de archivos: {lista_archivos}")
 
         # Paso 5: Subir archivos a Watson Discovery
