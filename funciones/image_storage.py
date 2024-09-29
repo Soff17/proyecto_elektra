@@ -3,7 +3,7 @@ from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor
 
 def initialize_storage_client():
-    return storage.Client.from_service_account_json('')
+    return storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra/quotes-381505-09ca05ec8b5e.json')
 
 # Función para vaciar el bucket eliminando todos los blobs a la vez
 def empty_bucket(bucket_name):
@@ -45,5 +45,18 @@ def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
         
         # Asegurarse de que todas las subidas hayan terminado
         for future in futures:
-            print(f"Todas las imágenes se han subido.")
             future.result()
+
+# Función para contar las imagenes en el storage. 
+def count_images_in_bucket(bucket_name):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    
+    # Obtener todos los blobs (objetos) en el bucket
+    blobs = list(bucket.list_blobs())
+    
+    # Contar los blobs
+    image_count = len(blobs)
+    
+    print(f"El bucket '{bucket_name}' contiene {image_count} imágenes.")
+    return image_count
