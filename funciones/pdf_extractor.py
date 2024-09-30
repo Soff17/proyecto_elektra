@@ -3,6 +3,7 @@ import re
 import os
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
+sku_pattern_2 = re.compile(r'Sku de referencia: \s*(\S+)')
 vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
 
 titulos = []
@@ -36,7 +37,7 @@ def extraer_informacion(page):
                     text = span['text'].strip()
                     text_size = span['size']
                     text_flags = span['flags']
-                    
+
                     #Get nombre de categoria
                     if nombre_de_categoria(text_size, text_flags) and inicio_producto == False:
                         if text_buffer in titulos:
@@ -57,6 +58,11 @@ def extraer_informacion(page):
                         sku = sku_pattern.findall(text)[0]
                         sku = sku.replace(".","")
                         skus.append(sku)
+
+                    elif sku_pattern_2.findall(text):
+                        sku = sku_pattern_2.findall(text)[0]
+                        sku = sku.replace(".","")
+                        skus.append(sku)
                     
                     #Get Vigencias
                     elif vigencia_pattern.findall(text):
@@ -71,7 +77,7 @@ def extraer_informacion(page):
                         else:
                             word = ' ' + text
                             info[len(info)-1] += word
-    
+
                     text_buffer = text
 
 def extraer_imagenes_orden(output_imagenes, page, doc):
@@ -136,10 +142,9 @@ def particion_pdf(pdf_path, output_archivos):
     doc_pagina.close()
 
 
-def procesar_pdf(pdf_path, output_archivos, output_imagenes):
+def procesar_pdf(pdf_path, output_imagenes):
     doc = fitz.open(pdf_path)
     ruta_base = os.getcwd()
-    
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
@@ -168,6 +173,10 @@ def procesar_pdf(pdf_path, output_archivos, output_imagenes):
             if sku:
                 sku_num = "Sku: " + sku
                 data = [subtitulo, sku_num, content, vigencia]
-                guardar_informacion(ruta_directorio, f"{sku} {url}", data)
+                guardar_informacion(ruta_directorio, f"{titulos[0]} {sku} {url}", data)
+    
+    doc.close()
+    nuevo_nombre = f"./arhivos_pdf/{titulos[0]}.pdf"
+    os.rename(pdf_path, nuevo_nombre)
         
             
