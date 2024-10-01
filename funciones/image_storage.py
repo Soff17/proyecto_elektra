@@ -5,17 +5,19 @@ from concurrent.futures import ThreadPoolExecutor
 def initialize_storage_client():
     return storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra/quotes-381505-09ca05ec8b5e.json')
 
-# Función para vaciar el bucket eliminando todos los blobs a la vez
-def empty_bucket(bucket_name):
+# Función para vaciar la carpeta de imagenes_subidas en lugar de todo el bucket
+def empty_bucket_folder(bucket_name, folder_name):
     client = initialize_storage_client()
     bucket = client.bucket(bucket_name)
-    blobs = list(bucket.list_blobs())
-
+    
+    # Listar solo los blobs que están dentro de la carpeta especificada
+    blobs = list(bucket.list_blobs(prefix=folder_name))
+    
     if blobs:
         bucket.delete_blobs(blobs)
-        print(f"Todas las imágenes han sido eliminadas del bucket '{bucket_name}'.")
+        print(f"Todas las imágenes en la carpeta '{folder_name}' han sido eliminadas del bucket '{bucket_name}'.")
     else:
-        print(f"No hay imágenes en el bucket '{bucket_name}'.")
+        print(f"No hay imágenes en la carpeta '{folder_name}' dentro del bucket '{bucket_name}'.")
 
 # Función para subir una imagen
 def upload_image(client, bucket_name, file_path, blob_name):
