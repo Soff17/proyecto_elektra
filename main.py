@@ -71,7 +71,7 @@ def procesar_y_subir():
             time.sleep(5)
 
         # Paso 7: Eliminar las imágenes de Google Cloud Storage
-        st.empty_bucket(bucket_name)
+        st.empty_bucket_folder(bucket_name,carpeta_en_bucket)
 
         # Contar cuántas imágenes hay en la carpeta local
         imagenes_en_carpeta = len(os.listdir(output_imagenes))
