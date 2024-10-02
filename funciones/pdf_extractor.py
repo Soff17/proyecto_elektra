@@ -25,9 +25,10 @@ def nombre_del_producto(font_size, font_flags):
 
 def extraer_informacion(page):
     blocks = page.get_text("dict",sort=True)["blocks"]
-    text_buffer = ""
+    text_buffer = ''
     inicio_producto = False
     fin_producto = False
+    datos = ''
 
     for block in blocks:
         if 'lines' in block:
@@ -37,6 +38,12 @@ def extraer_informacion(page):
                     text = span['text'].strip()
                     text_size = span['size']
                     text_flags = span['flags']
+
+                    print("\n-------------")
+                    print(f"Inicio Producto: {inicio_producto}")
+                    print(f"Fin Producto: {fin_producto}")
+                    print(f"Text: {text}")
+                    print("-------------")
 
                     #Get nombre de categoria
                     if nombre_de_categoria(text_size, text_flags) and inicio_producto == False:
@@ -51,32 +58,43 @@ def extraer_informacion(page):
                             subtitulos[len(subtitulos)-1] += " " + text
                         else:
                             subtitulos.append(text)
-                        inicio_producto = True
+                            inicio_producto = True
+                            fin_producto = False
+                            datos = ''
+                        print(f"\nTITULO: {subtitulos[len(subtitulos)-1]}")
                     
                     #Get SKUs
                     elif sku_pattern.findall(text):
                         sku = sku_pattern.findall(text)[0]
                         sku = sku.replace(".","")
                         skus.append(sku)
+                        fin_producto = True
 
-                    elif sku_pattern_2.findall(text):
-                        sku = sku_pattern_2.findall(text)[0]
-                        sku = sku.replace(".","")
-                        skus.append(sku)
+                    # elif sku_pattern_2.findall(text):
+                    #     sku = sku_pattern_2.findall(text)[0]
+                    #     sku = sku.replace(".","")
+                    #     skus.append(sku)
                     
                     #Get Vigencias
-                    elif vigencia_pattern.findall(text):
+                    elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
                         vigencias.append(text)
-                        fin_producto = True
+                        print(f"\nINSERT DATOS:\n{datos}")
+                        info.append(datos)
+                        datos=""
+                        fin_producto = False
                         inicio_producto = False
+                        
+                    #Get Info prodcuto
+                    else:
+                        datos += " " + text
+                    # elif inicio_producto:
+                    #     if fin_producto or len(info) == 0:
+                    #         info.append(text)
+                    #         fin_producto = False
+                    #     else:
+                    #         word = ' ' + text
+                    #         info[len(info)-1] += word
 
-                    elif inicio_producto:
-                        if fin_producto or len(info) == 0:
-                            info.append(text)
-                            fin_producto = False
-                        else:
-                            word = ' ' + text
-                            info[len(info)-1] += word
 
                     text_buffer = text
 
@@ -158,11 +176,15 @@ def procesar_pdf(pdf_path, output_imagenes):
 
         extraer_informacion(page)
         get_urls(page)
-        extraer_imagenes_orden(output_imagenes, page, doc)
+        #extraer_imagenes_orden(output_imagenes, page, doc)
 
         ruta_directorio = os.path.join(ruta_base, 'archivos_dummy', f'{titulos[0]}')
         os.makedirs(ruta_directorio, exist_ok=True)
-        
+        # print(f"\n-------------")
+        # print(f"LEN DE INFO: {len(info)}")
+        # print(f"LEN DE SKU: {len(skus)}")
+        # print(f"LEN DE VIGENCIAS: {len(vigencias)}")
+        # print("-------------")
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
@@ -173,10 +195,10 @@ def procesar_pdf(pdf_path, output_imagenes):
             if sku:
                 sku_num = "Sku: " + sku
                 data = [subtitulo, sku_num, content, vigencia]
-                guardar_informacion(ruta_directorio, f"{titulos[0]} {sku} {url}", data)
+                guardar_informacion(ruta_directorio, f"{titulos[0]} {sku}", data)
     
-    doc.close()
-    nuevo_nombre = f"./arhivos_pdf/{titulos[0]}.pdf"
-    os.rename(pdf_path, nuevo_nombre)
+    # doc.close()
+    # nuevo_nombre = f"./arhivos_pdf/{titulos[0]}.pdf"
+    # os.rename(pdf_path, nuevo_nombre)
         
             
