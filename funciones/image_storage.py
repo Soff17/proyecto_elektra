@@ -49,7 +49,8 @@ def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
         for future in futures:
             future.result()
 
-# Función para contar las imagenes en el storage. 
+# Función para contar las imagenes en el storage.
+''''
 def count_images_in_bucket(bucket_name):
     client = initialize_storage_client()
     bucket = client.bucket(bucket_name)
@@ -61,6 +62,20 @@ def count_images_in_bucket(bucket_name):
     image_count = len(blobs)
     
     print(f"El bucket '{bucket_name}' contiene {image_count} imágenes.")
+    return image_count
+'''
+# Función para contar las imágenes en una carpeta específica del bucket
+def count_images_in_bucket(bucket_name, folder_name):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    
+    # Listar los blobs que están dentro de la carpeta especificada
+    blobs = list(bucket.list_blobs(prefix=folder_name))
+    
+    # Filtrar solo imágenes por su tipo MIME (esto depende del formato de imágenes que estés utilizando, por ejemplo, PNG o JPG)
+    image_count = sum(1 for blob in blobs if blob.name.endswith(('.png', '.jpg', '.jpeg', '.gif')))
+    
+    print(f"La carpeta '{folder_name}' en el bucket '{bucket_name}' contiene {image_count} imágenes.")
     return image_count
 
 # Function to upload a PDF
