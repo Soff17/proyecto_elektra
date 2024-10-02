@@ -109,8 +109,8 @@ def procesar_y_subir():
         st.empty_bucket_folder(bucket_name,'pdfs')
 
         # Step 2: Count the number of PDFs in the local folder
-        pdfs_in_local_folder = len([file for file in os.listdir('arhivos_pdf') if file.endswith('.pdf')])
-        print(f"PDFs in the local folder 'arhivos_pdf': {pdfs_in_local_folder}")
+        pdfs_in_local_folder = len([file for file in os.listdir('archivos_pdf') if file.endswith('.pdf')])
+        print(f"PDFs in the local folder 'archivos_pdf': {pdfs_in_local_folder}")
 
         # Step 3: Wait until the bucket is empty before uploading new PDFs
         while True:
@@ -118,7 +118,7 @@ def procesar_y_subir():
             if pdfs_in_bucket == 0:
                 print("The bucket is empty, ready to upload new PDFs.")
                 # Upload PDFs to the bucket
-                st.upload_pdfs_in_folder(bucket_name, 'arhivos_pdf', 'pdfs')
+                st.upload_pdfs_in_folder(bucket_name, 'archivos_pdf', 'pdfs')
                 break
             else:
                 print(f"There are still {pdfs_in_bucket} PDFs in the bucket. Waiting...")

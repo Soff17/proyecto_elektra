@@ -132,8 +132,8 @@ def get_urls(page):
         url = link['uri']
         url = url.replace("https://www.elektra.mx/", "")
         url = url.replace(":","-")
-        url = url.replace("/", "-")
-        url = url.replace("?", "-")
+        url = url.replace("/", "[")
+        url = url.replace("?", "]")
         url = url.replace("%", "-")
         urls.append(url)
 
