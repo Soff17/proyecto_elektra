@@ -15,8 +15,8 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Rutas fijas para archivos
-pdf = './data/folleto.pdf'
-output_arhivos = './archivos_dummy'
+pdf = './data/pdfNeuevo.pdf'
+output_arhivos_pdf = './archivos_pdf'
 output_imagenes = './imagenes'
 
 # Rutas fijas para imágenes
@@ -44,7 +44,13 @@ def procesar_y_subir():
             total_documentos = wd.contar_documentos()
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
+                pe.particion_pdf(pdf, output_arhivos_pdf)
+                print("PDF particionado")
+                archivos_pdf = [archivo for archivo in os.listdir(output_arhivos_pdf) if archivo.endswith('.pdf')]
+                for arhivo in archivos_pdf:
+                    print(arhivo)
+                    pdf_path = f"./archivos_pdf/{arhivo}"
+                    pe.procesar_pdf(pdf_path, output_imagenes) 
                 print("PDF procesado exitosamente.")
                 break
             else:
@@ -52,12 +58,12 @@ def procesar_y_subir():
             time.sleep(5)
 
         # Paso 4: Contar los archivos en la carpeta 'output_arhivos'
-        archivos_en_carpeta, lista_archivos = wd.contar_archivos_validos(output_arhivos)
-        print(f"Archivos en la carpeta {output_arhivos}: {archivos_en_carpeta}")
+        archivos_en_carpeta, lista_archivos = wd.contar_archivos_validos('./archivos_dummy')
+        print(f"Archivos en la carpeta {'./archivos_dummy'}: {archivos_en_carpeta}")
         print(f"Lista de archivos: {lista_archivos}")
 
         # Paso 5: Subir archivos a Watson Discovery
-        wd.subir_archivos_de_carpeta(output_arhivos)
+        wd.subir_archivos_de_carpeta('./archivos_dummy')
         print("Archivos subidos exitosamente a Watson Discovery.")
 
         # Paso 6: Esperar hasta que el conteo de documentos en Discovery coincida con los archivos subidos
@@ -79,7 +85,7 @@ def procesar_y_subir():
 
         # Esperar hasta que el bucket esté vacío
         while True:
-            imagenes_en_bucket = st.count_images_in_bucket(bucket_name)
+            imagenes_en_bucket = st.count_images_in_bucket(bucket_name, carpeta_en_bucket)
             if imagenes_en_bucket == 0:
                 print("El bucket está vacío, listo para subir nuevas imágenes.")
                 # Subir imágenes al bucket
@@ -91,7 +97,7 @@ def procesar_y_subir():
 
         # Paso 8: Verificar si todas las imágenes han sido subidas al bucket
         while True:
-            imagenes_en_bucket = st.count_images_in_bucket(bucket_name)
+            imagenes_en_bucket = st.count_images_in_bucket(bucket_name, carpeta_en_bucket)
             if imagenes_en_bucket == imagenes_en_carpeta:
                 print(f"Todas las imágenes ({imagenes_en_bucket}) han sido subidas exitosamente a Google Cloud Storage.")
                 break
