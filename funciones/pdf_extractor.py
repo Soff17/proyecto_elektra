@@ -40,9 +40,10 @@ def extraer_informacion(page):
                     text_flags = span['flags']
 
                     # print("\n-------------")
-                    # print(f"Inicio Producto: {inicio_producto}")
-                    # print(f"Fin Producto: {fin_producto}")
+                    # print(f"Text Size: {text_size}")
+                    # print(f"Text flags: {text_flags}")
                     # print(f"Text: {text}")
+                    # print(f"Text buffer: {text_buffer}")
                     # print("-------------")
 
                     #Get nombre de categoria
@@ -54,7 +55,7 @@ def extraer_informacion(page):
 
                     #Get nombre de prodcuto
                     elif nombre_del_producto(text_size, text_flags):
-                        if text_buffer in subtitulos:
+                        if inicio_producto:
                             subtitulos[len(subtitulos)-1] += " " + text
                         else:
                             subtitulos.append(text)

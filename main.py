@@ -12,15 +12,15 @@ def main():
     pdf = './data/pdfNeuevo.pdf'
     output_arhivos_pdf = './archivos_pdf'
     output_imagenes = './imagenes'
-    #pe.procesar_pdf(f"./arhivos_pdf/pagina_1.pdf", output_imagenes)
-    pe.particion_pdf(pdf, output_arhivos_pdf)
+    pe.procesar_pdf(f"./archivos_pdf/pagina_1.pdf", output_imagenes)
+    # pe.particion_pdf(pdf, output_arhivos_pdf)
     
-    archivos_pdf = [archivo for archivo in os.listdir(output_arhivos_pdf) if archivo.endswith('.pdf')]
+    # archivos_pdf = [archivo for archivo in os.listdir(output_arhivos_pdf) if archivo.endswith('.pdf')]
     
-    for arhivo in archivos_pdf:
-        print(arhivo)
-        pdf_path = f"./archivos_pdf/{arhivo}"
-        pe.procesar_pdf(pdf_path, output_imagenes)   
+    # for arhivo in archivos_pdf:
+    #     print(arhivo)
+    #     pdf_path = f"./archivos_pdf/{arhivo}"
+    #     pe.procesar_pdf(pdf_path, output_imagenes)   
 
     # Subir archivos Excel desde una carpeta a Watson Discovery
     #carpeta_excel = './data'
