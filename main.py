@@ -44,13 +44,7 @@ def procesar_y_subir():
             total_documentos = wd.contar_documentos()
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                pe.particion_pdf(pdf, output_arhivos_pdf)
-                print("PDF particionado")
-                archivos_pdf = [archivo for archivo in os.listdir(output_arhivos_pdf) if archivo.endswith('.pdf')]
-                for arhivo in archivos_pdf:
-                    print(arhivo)
-                    pdf_path = f"./archivos_pdf/{arhivo}"
-                    pe.procesar_pdf(pdf_path, output_imagenes) 
+                pe.procesar_pdf(pdf, output_imagenes, output_arhivos_pdf)
                 print("PDF procesado exitosamente.")
                 break
             else:
