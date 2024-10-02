@@ -160,7 +160,7 @@ def particion_pdf(pdf_path, output_archivos):
     doc_pagina.close()
 
 
-def procesar_pdf(pdf_path, output_imagenes):
+def procesar_pdf(pdf_path, output_imagenes, output_archivos):
     print(pdf_path)
     doc = fitz.open(pdf_path)
     ruta_base = os.getcwd()
@@ -201,9 +201,15 @@ def procesar_pdf(pdf_path, output_imagenes):
                 sku_num = "Sku: " + sku
                 data = [subtitulo, sku_num, content, vigencia]
                 guardar_informacion(ruta_directorio, f"{titulos[0]} {sku} {url}", data)
+
+        #Particion pdf
+        doc_pagina = fitz.open()
+        doc_pagina.insert_pdf(doc, from_page=page_num, to_page=page_num)
+        nombre_archivo_salida = f"{output_archivos}/{titulos[0]}.pdf"
+        doc_pagina.save(nombre_archivo_salida)
+
+        doc_pagina.close()
     
-        doc.close()
-        nuevo_nombre = f"./archivos_pdf/{titulos[0]}.pdf"
-        os.rename(pdf_path, nuevo_nombre)
-        
-            
+        # doc.close()
+        # nuevo_nombre = f"./archivos_pdf/{titulos[0]}.pdf"
+        # os.rename(pdf_path, nuevo_nombre)
