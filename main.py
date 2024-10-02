@@ -44,7 +44,7 @@ def procesar_y_subir():
             total_documentos = wd.contar_documentos()
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
+                # pe.procesar_pdf(pdf, output_arhivos, output_imagenes)
                 print("PDF procesado exitosamente.")
                 break
             else:
@@ -79,7 +79,7 @@ def procesar_y_subir():
 
         # Esperar hasta que el bucket esté vacío
         while True:
-            imagenes_en_bucket = st.count_images_in_bucket(bucket_name)
+            imagenes_en_bucket = st.count_images_in_bucket(bucket_name, carpeta_en_bucket)
             if imagenes_en_bucket == 0:
                 print("El bucket está vacío, listo para subir nuevas imágenes.")
                 # Subir imágenes al bucket
@@ -91,7 +91,7 @@ def procesar_y_subir():
 
         # Paso 8: Verificar si todas las imágenes han sido subidas al bucket
         while True:
-            imagenes_en_bucket = st.count_images_in_bucket(bucket_name)
+            imagenes_en_bucket = st.count_images_in_bucket(bucket_name, carpeta_en_bucket)
             if imagenes_en_bucket == imagenes_en_carpeta:
                 print(f"Todas las imágenes ({imagenes_en_bucket}) han sido subidas exitosamente a Google Cloud Storage.")
                 break

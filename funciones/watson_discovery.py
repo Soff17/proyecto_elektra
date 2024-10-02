@@ -110,6 +110,7 @@ def subir_archivo_en_paralelo(ruta_archivo, archivo):
         print(f"Error al subir el archivo: {archivo}")
 
 # Función para procesar todos los archivos en una carpeta
+''''
 def subir_archivos_de_carpeta(carpeta):
     archivos = os.listdir(carpeta)
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -120,6 +121,18 @@ def subir_archivos_de_carpeta(carpeta):
         
         for future in concurrent.futures.as_completed(futures):
             future.result()
+'''
+# Función para procesar todos los archivos en una carpeta y subcarpetas
+def subir_archivos_de_carpeta(carpeta):
+    for ruta_carpeta, subcarpetas, archivos in os.walk(carpeta):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = []
+            for archivo in archivos:
+                ruta_archivo = os.path.join(ruta_carpeta, archivo)
+                futures.append(executor.submit(subir_archivo_en_paralelo, ruta_archivo, archivo))
+            
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
 
 # Función para contar el número total de documentos en una colección
 def contar_documentos():
@@ -207,7 +220,14 @@ def descargar_todos_los_documentos(carpeta_descarga):
 
         offset += page_limit
 
-# Filtrar archivos ocultos o temporales
+# Filtrar archivos ocultos o temporales y contar archivos en subcarpetas
 def contar_archivos_validos(carpeta):
-    archivos_validos = [f for f in os.listdir(carpeta) if not f.startswith('.') and os.path.isfile(os.path.join(carpeta, f))]
+    archivos_validos = []
+    for ruta_carpeta, subcarpetas, archivos in os.walk(carpeta):
+        for archivo in archivos:
+            # Ignorar archivos ocultos o temporales
+            if not archivo.startswith('.') and os.path.isfile(os.path.join(ruta_carpeta, archivo)):
+                archivos_validos.append(os.path.join(ruta_carpeta, archivo))
+
+    print(f"Archivos válidos encontrados: {archivos_validos}")
     return len(archivos_validos), archivos_validos
