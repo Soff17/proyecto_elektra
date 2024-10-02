@@ -39,11 +39,11 @@ def extraer_informacion(page):
                     text_size = span['size']
                     text_flags = span['flags']
 
-                    print("\n-------------")
-                    print(f"Inicio Producto: {inicio_producto}")
-                    print(f"Fin Producto: {fin_producto}")
-                    print(f"Text: {text}")
-                    print("-------------")
+                    # print("\n-------------")
+                    # print(f"Inicio Producto: {inicio_producto}")
+                    # print(f"Fin Producto: {fin_producto}")
+                    # print(f"Text: {text}")
+                    # print("-------------")
 
                     #Get nombre de categoria
                     if nombre_de_categoria(text_size, text_flags) and inicio_producto == False:
@@ -61,7 +61,7 @@ def extraer_informacion(page):
                             inicio_producto = True
                             fin_producto = False
                             datos = ''
-                        print(f"\nTITULO: {subtitulos[len(subtitulos)-1]}")
+                        #print(f"\nTITULO: {subtitulos[len(subtitulos)-1]}")
                     
                     #Get SKUs
                     elif sku_pattern.findall(text):
@@ -78,7 +78,7 @@ def extraer_informacion(page):
                     #Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
                         vigencias.append(text)
-                        print(f"\nINSERT DATOS:\n{datos}")
+                        #print(f"\nINSERT DATOS:\n{datos}")
                         info.append(datos)
                         datos=""
                         fin_producto = False
@@ -138,7 +138,6 @@ def get_urls(page):
         urls.append(url)
 
 def guardar_informacion(output_arhivos, name_file, data):
-    # print(f"LEN: {len(name_file)}")
     # if len(name_file) > 170:
     #     filepath = f"{output_arhivos}/dummy{len(name_file)}.txt"
     # else:
@@ -150,17 +149,18 @@ def guardar_informacion(output_arhivos, name_file, data):
         
 def particion_pdf(pdf_path, output_archivos):
     doc = fitz.open(pdf_path)
-
+    
     for num_page in range(doc.page_count):
         doc_pagina = fitz.open()
-        
         doc_pagina.insert_pdf(doc, from_page=num_page, to_page=num_page)
         nombre_archivo_salida = f"{output_archivos}/pagina_{num_page + 1}.pdf"
         doc_pagina.save(nombre_archivo_salida)
+        
     doc_pagina.close()
 
 
 def procesar_pdf(pdf_path, output_imagenes):
+    print(pdf_path)
     doc = fitz.open(pdf_path)
     ruta_base = os.getcwd()
 
@@ -176,7 +176,10 @@ def procesar_pdf(pdf_path, output_imagenes):
 
         extraer_informacion(page)
         get_urls(page)
-        #extraer_imagenes_orden(output_imagenes, page, doc)
+        extraer_imagenes_orden(output_imagenes, page, doc)
+
+        if len(titulos) == 0:
+            break
 
         ruta_directorio = os.path.join(ruta_base, 'archivos_dummy', f'{titulos[0]}')
         os.makedirs(ruta_directorio, exist_ok=True)
@@ -185,6 +188,7 @@ def procesar_pdf(pdf_path, output_imagenes):
         # print(f"LEN DE SKU: {len(skus)}")
         # print(f"LEN DE VIGENCIAS: {len(vigencias)}")
         # print("-------------")
+
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
@@ -195,10 +199,10 @@ def procesar_pdf(pdf_path, output_imagenes):
             if sku:
                 sku_num = "Sku: " + sku
                 data = [subtitulo, sku_num, content, vigencia]
-                guardar_informacion(ruta_directorio, f"{titulos[0]} {sku}", data)
+                guardar_informacion(ruta_directorio, f"{titulos[0]} {sku} {url}", data)
     
-    # doc.close()
-    # nuevo_nombre = f"./arhivos_pdf/{titulos[0]}.pdf"
-    # os.rename(pdf_path, nuevo_nombre)
+        doc.close()
+        nuevo_nombre = f"./archivos_pdf/{titulos[0]}.pdf"
+        os.rename(pdf_path, nuevo_nombre)
         
             
