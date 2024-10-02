@@ -3,7 +3,7 @@ from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor
 
 def initialize_storage_client():
-    return storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra_2/quotes-381505-09ca05ec8b5e.json')
+    return storage.Client.from_service_account_json('')
 
 # Función para vaciar la carpeta de imagenes_subidas en lugar de todo el bucket
 def empty_bucket_folder(bucket_name, folder_name):
