@@ -71,7 +71,7 @@ def procesar_y_subir():
             time.sleep(5)
 
         # Paso 7: Eliminar las imágenes de Google Cloud Storage
-        st.empty_bucket(bucket_name)
+        st.empty_bucket_folder(bucket_name,carpeta_en_bucket)
 
         # Contar cuántas imágenes hay en la carpeta local
         imagenes_en_carpeta = len(os.listdir(output_imagenes))
@@ -97,6 +97,25 @@ def procesar_y_subir():
                 break
             else:
                 print(f"Imágenes en el bucket: {imagenes_en_bucket}, esperando a que coincidan con las {imagenes_en_carpeta} imágenes locales...")
+            time.sleep(5)
+
+        # Paso 7: Eliminar las imágenes de Google Cloud Storage
+        st.empty_bucket_folder(bucket_name,'pdfs')
+
+        # Step 2: Count the number of PDFs in the local folder
+        pdfs_in_local_folder = len([file for file in os.listdir('arhivos_pdf') if file.endswith('.pdf')])
+        print(f"PDFs in the local folder 'arhivos_pdf': {pdfs_in_local_folder}")
+
+        # Step 3: Wait until the bucket is empty before uploading new PDFs
+        while True:
+            pdfs_in_bucket = st.count_pdfs_in_bucket(bucket_name)
+            if pdfs_in_bucket == 0:
+                print("The bucket is empty, ready to upload new PDFs.")
+                # Upload PDFs to the bucket
+                st.upload_pdfs_in_folder(bucket_name, 'arhivos_pdf', 'pdfs')
+                break
+            else:
+                print(f"There are still {pdfs_in_bucket} PDFs in the bucket. Waiting...")
             time.sleep(5)
 
         return jsonify({"message": "Proceso completo: documentos eliminados, PDF procesado, archivos e imágenes subidas"}), 200

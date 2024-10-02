@@ -5,17 +5,19 @@ from concurrent.futures import ThreadPoolExecutor
 def initialize_storage_client():
     return storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra/quotes-381505-09ca05ec8b5e.json')
 
-# Función para vaciar el bucket eliminando todos los blobs a la vez
-def empty_bucket(bucket_name):
+# Función para vaciar la carpeta de imagenes_subidas en lugar de todo el bucket
+def empty_bucket_folder(bucket_name, folder_name):
     client = initialize_storage_client()
     bucket = client.bucket(bucket_name)
-    blobs = list(bucket.list_blobs())
-
+    
+    # Listar solo los blobs que están dentro de la carpeta especificada
+    blobs = list(bucket.list_blobs(prefix=folder_name))
+    
     if blobs:
         bucket.delete_blobs(blobs)
-        print(f"Todas las imágenes han sido eliminadas del bucket '{bucket_name}'.")
+        print(f"Todas las imágenes en la carpeta '{folder_name}' han sido eliminadas del bucket '{bucket_name}'.")
     else:
-        print(f"No hay imágenes en el bucket '{bucket_name}'.")
+        print(f"No hay imágenes en la carpeta '{folder_name}' dentro del bucket '{bucket_name}'.")
 
 # Función para subir una imagen
 def upload_image(client, bucket_name, file_path, blob_name):
@@ -60,3 +62,47 @@ def count_images_in_bucket(bucket_name):
     
     print(f"El bucket '{bucket_name}' contiene {image_count} imágenes.")
     return image_count
+
+# Function to upload a PDF
+def upload_pdf(client, bucket_name, file_path, blob_name):
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    blob.upload_from_filename(file_path)
+
+# Function to upload multiple PDFs concurrently
+def upload_pdfs_in_folder(bucket_name, folder_path, bucket_folder_name):
+    client = initialize_storage_client()
+    
+    # Create a list of files in the local folder (only PDFs)
+    file_paths = [
+        os.path.join(folder_path, filename)
+        for filename in os.listdir(folder_path)
+        if filename.endswith('.pdf') and os.path.isfile(os.path.join(folder_path, filename))
+    ]
+
+    # Use ThreadPoolExecutor to upload the PDFs in parallel
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [
+            executor.submit(
+                upload_pdf, client, bucket_name, file_path, f'{bucket_folder_name}/{os.path.basename(file_path)}'
+            )
+            for file_path in file_paths
+        ]
+        
+        # Ensure all uploads are complete
+        for future in futures:
+            future.result()
+
+# Function to count the number of PDFs in the storage bucket
+def count_pdfs_in_bucket(bucket_name):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    
+    # Get all the blobs (objects) in the bucket
+    blobs = list(bucket.list_blobs())
+    
+    # Filter out only PDFs
+    pdf_count = sum(1 for blob in blobs if blob.name.endswith('.pdf'))
+    
+    print(f"The bucket '{bucket_name}' contains {pdf_count} PDFs.")
+    return pdf_count
