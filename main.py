@@ -14,7 +14,7 @@ def main():
     output_arhivos = './archivos_dummy'
     output_imagenes = './imagenes'
     pe.procesar_pdf(f"./arhivos_pdf/pagina_1.pdf", output_imagenes)
-    # pe.particion_pdf(pdf, output_arhivos_pdf)
+    #pe.particion_pdf(pdf, output_arhivos_pdf)
 
     # archivos_pdf = [archivo for archivo in os.listdir(output_arhivos_pdf) if archivo.endswith('.pdf')]
     # print(archivos_pdf)

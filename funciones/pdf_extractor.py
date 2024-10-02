@@ -121,7 +121,7 @@ def get_urls(page):
 
 def guardar_informacion(output_arhivos, name_file, data):
     # print(f"LEN: {len(name_file)}")
-    # if len(name_file) > 185:
+    # if len(name_file) > 170:
     #     filepath = f"{output_arhivos}/dummy{len(name_file)}.txt"
     # else:
     #     filepath = f"{output_arhivos}/{name_file}.txt"
