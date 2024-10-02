@@ -1,6 +1,7 @@
 import fitz
 import re
 import os
+from funciones import watson_discovery as wd
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia: \s*(\S+)')
@@ -133,20 +134,20 @@ def get_urls(page):
         url = link['uri']
         url = url.replace("https://www.elektra.mx/", "")
         url = url.replace(":","-")
-        url = url.replace("/", "-")
-        url = url.replace("?", "-")
+        url = url.replace("/", "[")
+        url = url.replace("?", "]")
         url = url.replace("%", "-")
         urls.append(url)
 
-def guardar_informacion(output_arhivos, name_file, data):
-    # if len(name_file) > 170:
-    #     filepath = f"{output_arhivos}/dummy{len(name_file)}.txt"
-    # else:
-    #     filepath = f"{output_arhivos}/{name_file}.txt"
-    filepath = f"{output_arhivos}/{name_file}.txt"
-    with open(filepath, "w", encoding="utf-8") as archivo:
-        for dato in data:
-            archivo.write(dato + "\n")
+def guardar_informacion_a_discovery(titulo, name_file, data):
+    # Generar el contenido del archivo como una cadena
+    contenido_txt = "\n".join(data)
+    
+    # Subir directamente a IBM Watson Discovery
+    from funciones import watson_discovery as wd  # Importar Watson Discovery
+    
+    # Usar una función similar a `añadir_documento` para subir el contenido
+    wd.añadir_documento_desde_contenido(contenido_txt, f"{titulo} {name_file}.txt", 'text/plain')
         
 def particion_pdf(pdf_path, output_archivos):
     doc = fitz.open(pdf_path)
@@ -182,8 +183,8 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
         if len(titulos) == 0:
             break
 
-        ruta_directorio = os.path.join(ruta_base, 'archivos_dummy', f'{titulos[0]}')
-        os.makedirs(ruta_directorio, exist_ok=True)
+        # ruta_directorio = os.path.join(ruta_base, 'archivos_dummy', f'{titulos[0]}')
+        # os.makedirs(ruta_directorio, exist_ok=True)
         # print(f"\n-------------")
         # print(f"LEN DE INFO: {len(info)}")
         # print(f"LEN DE SKU: {len(skus)}")
@@ -200,7 +201,7 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
             if sku:
                 sku_num = "Sku: " + sku
                 data = [subtitulo, sku_num, content, vigencia]
-                guardar_informacion(ruta_directorio, f"{titulos[0]} {sku} {url}", data)
+                guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
         #Particion pdf
         doc_pagina = fitz.open()

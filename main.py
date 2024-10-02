@@ -50,7 +50,7 @@ def procesar_y_subir():
             else:
                 print(f"Aún quedan {total_documentos} documentos. Esperando...")
             time.sleep(5)
-
+        ''''
         # Paso 4: Contar los archivos en la carpeta 'output_arhivos'
         archivos_en_carpeta, lista_archivos = wd.contar_archivos_validos('./archivos_dummy')
         print(f"Archivos en la carpeta {'./archivos_dummy'}: {archivos_en_carpeta}")
@@ -69,7 +69,7 @@ def procesar_y_subir():
             else:
                 print(f"Documentos en Discovery: {total_documentos}, esperando a que coincidan con los {archivos_en_carpeta} archivos...")
             time.sleep(5)
-
+        '''
         # Paso 7: Eliminar las imágenes de Google Cloud Storage
         st.empty_bucket_folder(bucket_name,carpeta_en_bucket)
 

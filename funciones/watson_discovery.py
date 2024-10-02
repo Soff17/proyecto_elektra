@@ -231,3 +231,25 @@ def contar_archivos_validos(carpeta):
 
     print(f"Archivos válidos encontrados: {archivos_validos}")
     return len(archivos_validos), archivos_validos
+
+# Función para añadir un documento con contenido directo a la colección
+def añadir_documento_desde_contenido(contenido, nombre_archivo, tipo_contenido):
+    nombre_archivo_sanitizado = sanitizar_nombre(nombre_archivo)
+
+    try:
+        # Convertir el contenido a bytes para su envío a Watson Discovery
+        contenido_bytes = contenido.encode('utf-8')
+        from io import BytesIO
+        contenido_io = BytesIO(contenido_bytes)
+
+        response = discovery.add_document(
+            project_id=project_id,
+            collection_id=collection_id,
+            file=contenido_io,
+            filename=nombre_archivo_sanitizado, 
+            file_content_type=tipo_contenido
+        ).get_result()
+        return response['document_id']
+    except Exception as e:
+        print(f"Error al subir {nombre_archivo}: {str(e)}")
+        return None
