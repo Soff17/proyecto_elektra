@@ -54,7 +54,7 @@ def extraer_informacion(page):
 
                     #Get nombre de prodcuto
                     elif nombre_del_producto(text_size, text_flags):
-                        if text_buffer in subtitulos:
+                        if inicio_producto:
                             subtitulos[len(subtitulos)-1] += " " + text
                         else:
                             subtitulos.append(text)
