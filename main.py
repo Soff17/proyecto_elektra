@@ -39,6 +39,9 @@ def procesar_y_subir():
         # Paso 7: Eliminar las imágenes de Google Cloud Storage
         st.empty_bucket_folder(bucket_name,'pdfs')
 
+        # Paso 7: Eliminar las imágenes de Google Cloud Storage
+        st.empty_bucket_folder(bucket_name,carpeta_en_bucket)
+
         # Paso 1: Eliminar documentos
         wd.eliminar_documentos()
 
@@ -72,7 +75,7 @@ def procesar_y_subir():
             else:
                 print(f"Documentos en Discovery: {total_documentos}, esperando a que coincidan con los {archivos_en_carpeta} archivos...")
             time.sleep(5)
-        '''
+        
         # Paso 7: Eliminar las imágenes de Google Cloud Storage
         st.empty_bucket_folder(bucket_name,carpeta_en_bucket)
 
@@ -101,6 +104,7 @@ def procesar_y_subir():
             else:
                 print(f"Imágenes en el bucket: {imagenes_en_bucket}, esperando a que coincidan con las {imagenes_en_carpeta} imágenes locales...")
             time.sleep(5)
+        '''
         ''''
         # Paso 7: Eliminar las imágenes de Google Cloud Storage
         st.empty_bucket_folder(bucket_name,'pdfs')

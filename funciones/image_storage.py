@@ -128,3 +128,10 @@ def upload_pdf_buffer(bucket_name, folder_name, blob_name, pdf_buffer):
     blob = bucket.blob(f'{folder_name}/{blob_name}')
     blob.upload_from_file(pdf_buffer, content_type='application/pdf')
     print(f"El PDF {blob_name} fue subido exitosamente al bucket {bucket_name}/{folder_name}.")
+
+def upload_image_buffer(bucket_name, folder_name, image_name, image_buffer):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(f'{folder_name}/{image_name}')
+    blob.upload_from_file(image_buffer, content_type='image/jpeg')  # Ajustar el tipo MIME si es PNG o GIF
+    print(f"La imagen {image_name} fue subida exitosamente al bucket {bucket_name}/{folder_name}.")

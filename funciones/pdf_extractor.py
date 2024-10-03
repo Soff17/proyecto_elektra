@@ -102,7 +102,7 @@ def extraer_informacion(page):
 
                     text_buffer = text
 
-def extraer_imagenes_orden(output_imagenes, page, doc):
+def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc):
     images = page.get_image_info(hashes=True, xrefs=True)
     imagenes = []
 
@@ -121,13 +121,16 @@ def extraer_imagenes_orden(output_imagenes, page, doc):
         image_bytes = base_image["image"]
         ext = base_image["ext"]
         
-        
-        if (len(skus)) > count:
-            path = f"./{output_imagenes}/{skus[count]}.{ext}"
+        if len(skus) > count:
+            image_name = f"{skus[count]}.{ext}"
         else:
-            path = f"./{output_imagenes}/producto_{count+1}.{ext}"
-        with open(path, "wb") as image_file:
-            image_file.write(image_bytes)
+            image_name = f"producto_{count+1}.{ext}"
+        
+        # Subir la imagen directamente desde el buffer al bucket
+        image_buffer = io.BytesIO(image_bytes)
+        st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
+
+        print(f"Imagen {image_name} subida exitosamente al bucket.")
         count += 1
 
 def get_urls(page):
@@ -180,7 +183,7 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
 
         extraer_informacion(page)
         get_urls(page)
-        extraer_imagenes_orden(output_imagenes, page, doc)
+        extraer_imagenes_orden('nds_test', 'imagenes_subidas', page, doc)
 
         if len(titulos) == 0:
             break
