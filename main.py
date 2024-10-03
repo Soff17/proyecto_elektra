@@ -7,6 +7,7 @@ from funciones.token import verificar_token, generate_token
 from dotenv import load_dotenv
 import os
 import time
+import io
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -14,7 +15,6 @@ load_dotenv()
 bucket_name = os.getenv('bucket_name')
 carpeta_imagenes_bucket = os.getenv('carpeta_imagenes_bucket')
 carpeta_pdfs_bucket = os.getenv('carpeta_pdfs_bucket')
-pdf = os.getenv('pdf')
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -32,11 +32,23 @@ def procesar_y_subir():
         # Verificar el token antes de proceder
         verificar_token()
 
+        # Verificar si se recibió un archivo PDF
+        if 'file' not in request.files:
+            return jsonify({"error": "No se encontró el archivo PDF en la solicitud"}), 400
+
+        pdf_file = request.files['file']
+
+        if pdf_file.filename == '':
+            return jsonify({"error": "El archivo PDF está vacío"}), 400
+
+        # Leer el archivo PDF en memoria
+        pdf_buffer = io.BytesIO(pdf_file.read())
+
         # Paso 1: Eliminar los pdf de Google Cloud Storage
-        st.empty_bucket_folder(bucket_name,carpeta_pdfs_bucket)
+        st.empty_bucket_folder(bucket_name, carpeta_pdfs_bucket)
 
         # Paso 2: Eliminar las imágenes de Google Cloud Storage
-        st.empty_bucket_folder(bucket_name,carpeta_imagenes_bucket)
+        st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
 
         # Paso 3: Eliminar documentos
         wd.eliminar_documentos()
@@ -46,7 +58,7 @@ def procesar_y_subir():
             total_documentos = wd.contar_documentos()
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                pe.procesar_pdf(pdf, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
+                pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
                 print("PDF procesado exitosamente.")
                 break
             else:

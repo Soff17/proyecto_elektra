@@ -153,6 +153,7 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
     
     # Usar una función similar a `añadir_documento` para subir el contenido
     wd.añadir_documento_desde_contenido(contenido_txt, f"{titulo} {name_file}.txt", 'text/plain')
+    print(f'se está subiendo "{titulo} {name_file}.txt"')
         
 def particion_pdf(pdf_path, output_archivos):
     doc = fitz.open(pdf_path)
@@ -166,9 +167,9 @@ def particion_pdf(pdf_path, output_archivos):
     doc_pagina.close()
 
 
-def procesar_pdf(pdf_path, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
-    print(pdf_path)
-    doc = fitz.open(pdf_path)
+def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
+    # Abre el PDF desde el buffer en memoria
+    doc = fitz.open(stream=pdf_buffer, filetype="pdf")
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
@@ -186,14 +187,6 @@ def procesar_pdf(pdf_path, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bu
 
         if len(titulos) == 0:
             break
-
-        # ruta_directorio = os.path.join(ruta_base, 'archivos_dummy', f'{titulos[0]}')
-        # os.makedirs(ruta_directorio, exist_ok=True)
-        # print(f"\n-------------")
-        # print(f"LEN DE INFO: {len(info)}")
-        # print(f"LEN DE SKU: {len(skus)}")
-        # print(f"LEN DE VIGENCIAS: {len(vigencias)}")
-        # print("-------------")
 
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
             sku = skus[i] if i < len(skus) else ""
@@ -213,12 +206,12 @@ def procesar_pdf(pdf_path, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bu
         nombre_archivo_pdf = f"{titulos[0]}.pdf"
 
         # Crear un buffer de bytes
-        pdf_buffer = io.BytesIO()
-        doc_pagina.save(pdf_buffer)
-        pdf_buffer.seek(0)  # Regresar al inicio del buffer
+        pdf_buffer_output = io.BytesIO()
+        doc_pagina.save(pdf_buffer_output)
+        pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
 
         # Subir el PDF directamente desde el buffer al bucket llamando a la función de tu script de storage
-        st.upload_pdf_buffer(bucket_name, carpeta_pdfs_bucket, nombre_archivo_pdf, pdf_buffer)
+        st.upload_pdf_buffer(bucket_name, carpeta_pdfs_bucket, nombre_archivo_pdf, pdf_buffer_output)
 
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
