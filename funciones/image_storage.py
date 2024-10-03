@@ -121,3 +121,10 @@ def count_pdfs_in_bucket(bucket_name):
     
     print(f"The bucket '{bucket_name}' contains {pdf_count} PDFs.")
     return pdf_count
+
+def upload_pdf_buffer(bucket_name, folder_name, blob_name, pdf_buffer):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(f'{folder_name}/{blob_name}')
+    blob.upload_from_file(pdf_buffer, content_type='application/pdf')
+    print(f"El PDF {blob_name} fue subido exitosamente al bucket {bucket_name}/{folder_name}.")

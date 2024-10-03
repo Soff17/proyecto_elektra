@@ -2,6 +2,8 @@ import fitz
 import re
 import os
 from funciones import watson_discovery as wd
+from funciones import image_storage as st
+import io
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia: \s*(\S+)')
@@ -203,14 +205,19 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
                 data = [subtitulo, sku_num, content, vigencia]
                 guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
-        #Particion pdf
+        # Partición pdf, se guarda en un buffer en lugar de archivo físico
         doc_pagina = fitz.open()
         doc_pagina.insert_pdf(doc, from_page=page_num, to_page=page_num)
-        nombre_archivo_salida = f"{output_archivos}/{titulos[0]}.pdf"
-        doc_pagina.save(nombre_archivo_salida)
+        nombre_archivo_pdf = f"{titulos[0]}.pdf"
+
+        # Crear un buffer de bytes
+        pdf_buffer = io.BytesIO()
+        doc_pagina.save(pdf_buffer)
+        pdf_buffer.seek(0)  # Regresar al inicio del buffer
+
+        # Subir el PDF directamente desde el buffer al bucket llamando a la función de tu script de storage
+        st.upload_pdf_buffer('nds_test', 'pdfs', nombre_archivo_pdf, pdf_buffer)
+
+        print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
         doc_pagina.close()
-    
-        # doc.close()
-        # nuevo_nombre = f"./archivos_pdf/{titulos[0]}.pdf"
-        # os.rename(pdf_path, nuevo_nombre)

@@ -36,6 +36,9 @@ def procesar_y_subir():
         # Verificar el token antes de proceder
         verificar_token()
 
+        # Paso 7: Eliminar las imágenes de Google Cloud Storage
+        st.empty_bucket_folder(bucket_name,'pdfs')
+
         # Paso 1: Eliminar documentos
         wd.eliminar_documentos()
 
@@ -98,7 +101,7 @@ def procesar_y_subir():
             else:
                 print(f"Imágenes en el bucket: {imagenes_en_bucket}, esperando a que coincidan con las {imagenes_en_carpeta} imágenes locales...")
             time.sleep(5)
-
+        ''''
         # Paso 7: Eliminar las imágenes de Google Cloud Storage
         st.empty_bucket_folder(bucket_name,'pdfs')
 
@@ -117,7 +120,7 @@ def procesar_y_subir():
             else:
                 print(f"There are still {pdfs_in_bucket} PDFs in the bucket. Waiting...")
             time.sleep(5)
-
+        '''
         return jsonify({"message": "Proceso completo: documentos eliminados, PDF procesado, archivos e imágenes subidas"}), 200
 
     except Exception as e:
