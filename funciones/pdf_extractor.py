@@ -22,7 +22,7 @@ def nombre_de_categoria(font_size, font_flags):
     return False
 
 def nombre_del_producto(font_size, font_flags):
-    if (font_size == 35.0 or font_size == 40.0) and (font_flags == 20 or font_flags == 4):
+    if (font_size > 34.0 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
         return True
     return False
 
@@ -49,8 +49,9 @@ def extraer_informacion(page):
                     # print(f"Text buffer: {text_buffer}")
                     # print("-------------")
 
-                    #Get nombre de categoria
+                    # Get nombre de categoria
                     if nombre_de_categoria(text_size, text_flags) and inicio_producto == False:
+                        text = text.replace(" ", "_")
                         if text_buffer in titulos:
                             titulos[len(titulos)-1] += " " + text
                         else:
@@ -135,16 +136,36 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc):
 
 def get_urls(page):
     links = page.get_links()
+    urls_with_rect = []
+
+    # Extraer URL y Rect de cada link y almacenar en lista de tuplas
     for link in links:
-        url = link['uri']
-        url = url.replace("https://www.elektra.mx/", "")
-        url = url.replace(":","-")
-        url = url.replace("/", "[")
-        url = url.replace("?", "]")
-        url = url.replace("%", "-")
+        if 'uri' in link and 'from' in link:
+            url = link['uri']
+            rect = link['from']
+            coordenadas = [rect[0], rect[1], rect[2], rect[3]]
+            # Limpiar el URL según tu lógica actual
+            url = url.replace("https://www.elektra.mx/", "")
+            url = url.replace("/","[")
+            url = url.replace("?", "]")
+            url = url.replace("=", "-")
+            url = url.replace("#", "-")
+            url = url.replace(":", "-")
+            urls_with_rect.append((url, coordenadas))
+
+    # Ordenar los URLs basados en las coordenadas rectangulares (x, y)
+    # La clave de ordenación podría ser: primero en el eje Y, luego en el eje X
+    urls_sorted = sorted(urls_with_rect, key=lambda x: (x[1][1], x[1][0]))
+
+    # Extraer solo los URLs ya ordenados
+    urls_sor = [url for url, _ in urls_sorted]
+    for url in urls_sor:
         urls.append(url)
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
+    # Reemplazar espacios con guiones bajos
+    titulo = titulo.replace(" ", "_")
+    
     # Generar el contenido del archivo como una cadena
     contenido_txt = "\n".join(data)
     
@@ -153,6 +174,7 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
     
     # Usar una función similar a `añadir_documento` para subir el contenido
     wd.añadir_documento_desde_contenido(contenido_txt, f"{titulo} {name_file}.txt", 'text/plain')
+    print(f'se está subiendo "{titulo} {name_file}.txt"')
         
 def particion_pdf(pdf_path, output_archivos):
     doc = fitz.open(pdf_path)
@@ -166,10 +188,9 @@ def particion_pdf(pdf_path, output_archivos):
     doc_pagina.close()
 
 
-def procesar_pdf(pdf_path, output_imagenes, output_archivos):
-    print(pdf_path)
-    doc = fitz.open(pdf_path)
-    ruta_base = os.getcwd()
+def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
+    # Abre el PDF desde el buffer en memoria
+    doc = fitz.open(stream=pdf_buffer, filetype="pdf")
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
@@ -182,19 +203,15 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
         vigencias.clear()
 
         extraer_informacion(page)
+
+        if len(titulos) == 0 or len(info) == 0:
+            break
+
         get_urls(page)
-        extraer_imagenes_orden('nds_test', 'imagenes_subidas', page, doc)
+        extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc)
 
         if len(titulos) == 0:
             break
-
-        # ruta_directorio = os.path.join(ruta_base, 'archivos_dummy', f'{titulos[0]}')
-        # os.makedirs(ruta_directorio, exist_ok=True)
-        # print(f"\n-------------")
-        # print(f"LEN DE INFO: {len(info)}")
-        # print(f"LEN DE SKU: {len(skus)}")
-        # print(f"LEN DE VIGENCIAS: {len(vigencias)}")
-        # print("-------------")
 
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
             sku = skus[i] if i < len(skus) else ""
@@ -211,15 +228,16 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
         # Partición pdf, se guarda en un buffer en lugar de archivo físico
         doc_pagina = fitz.open()
         doc_pagina.insert_pdf(doc, from_page=page_num, to_page=page_num)
-        nombre_archivo_pdf = f"{titulos[0]}.pdf"
+        nombre_archivo_pdf = f"{titulos[0].replace(' ', '_')}.pdf"
+
 
         # Crear un buffer de bytes
-        pdf_buffer = io.BytesIO()
-        doc_pagina.save(pdf_buffer)
-        pdf_buffer.seek(0)  # Regresar al inicio del buffer
+        pdf_buffer_output = io.BytesIO()
+        doc_pagina.save(pdf_buffer_output)
+        pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
 
         # Subir el PDF directamente desde el buffer al bucket llamando a la función de tu script de storage
-        st.upload_pdf_buffer('nds_test', 'pdfs', nombre_archivo_pdf, pdf_buffer)
+        st.upload_pdf_buffer(bucket_name, carpeta_pdfs_bucket, nombre_archivo_pdf, pdf_buffer_output)
 
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 

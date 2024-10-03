@@ -49,21 +49,6 @@ def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
         for future in futures:
             future.result()
 
-# Función para contar las imagenes en el storage.
-''''
-def count_images_in_bucket(bucket_name):
-    client = initialize_storage_client()
-    bucket = client.bucket(bucket_name)
-    
-    # Obtener todos los blobs (objetos) en el bucket
-    blobs = list(bucket.list_blobs())
-    
-    # Contar los blobs
-    image_count = len(blobs)
-    
-    print(f"El bucket '{bucket_name}' contiene {image_count} imágenes.")
-    return image_count
-'''
 # Función para contar las imágenes en una carpeta específica del bucket
 def count_images_in_bucket(bucket_name, folder_name):
     client = initialize_storage_client()
