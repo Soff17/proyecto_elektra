@@ -166,10 +166,9 @@ def particion_pdf(pdf_path, output_archivos):
     doc_pagina.close()
 
 
-def procesar_pdf(pdf_path, output_imagenes, output_archivos):
+def procesar_pdf(pdf_path, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
     print(pdf_path)
     doc = fitz.open(pdf_path)
-    ruta_base = os.getcwd()
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
@@ -183,7 +182,7 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
 
         extraer_informacion(page)
         get_urls(page)
-        extraer_imagenes_orden('nds_test', 'imagenes_subidas', page, doc)
+        extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc)
 
         if len(titulos) == 0:
             break
@@ -219,7 +218,7 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
         pdf_buffer.seek(0)  # Regresar al inicio del buffer
 
         # Subir el PDF directamente desde el buffer al bucket llamando a la función de tu script de storage
-        st.upload_pdf_buffer('nds_test', 'pdfs', nombre_archivo_pdf, pdf_buffer)
+        st.upload_pdf_buffer(bucket_name, carpeta_pdfs_bucket, nombre_archivo_pdf, pdf_buffer)
 
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 

@@ -109,19 +109,6 @@ def subir_archivo_en_paralelo(ruta_archivo, archivo):
     else:
         print(f"Error al subir el archivo: {archivo}")
 
-# Función para procesar todos los archivos en una carpeta
-''''
-def subir_archivos_de_carpeta(carpeta):
-    archivos = os.listdir(carpeta)
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = []
-        for archivo in archivos:
-            ruta_archivo = os.path.join(carpeta, archivo)
-            futures.append(executor.submit(subir_archivo_en_paralelo, ruta_archivo, archivo))
-        
-        for future in concurrent.futures.as_completed(futures):
-            future.result()
-'''
 # Función para procesar todos los archivos en una carpeta y subcarpetas
 def subir_archivos_de_carpeta(carpeta):
     for ruta_carpeta, subcarpetas, archivos in os.walk(carpeta):
