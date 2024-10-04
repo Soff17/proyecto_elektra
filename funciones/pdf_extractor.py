@@ -19,7 +19,7 @@ def nombre_de_categoria(font_size, font_flags):
     return False
 
 def nombre_del_producto(font_size, font_flags):
-    if (font_size == 35.0 or font_size == 40.0) and (font_flags == 20 or font_flags == 4):
+    if (font_size > 34.0 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
         return True
     return False
 
@@ -39,13 +39,6 @@ def extraer_informacion(page):
                     text_size = span['size']
                     text_flags = span['flags']
 
-                    # print("\n-------------")
-                    # print(f"Text Size: {text_size}")
-                    # print(f"Text flags: {text_flags}")
-                    # print(f"Text: {text}")
-                    # print(f"Text buffer: {text_buffer}")
-                    # print("-------------")
-
                     #Get nombre de categoria
                     if nombre_de_categoria(text_size, text_flags) and inicio_producto == False:
                         if text_buffer in titulos:
@@ -62,7 +55,6 @@ def extraer_informacion(page):
                             inicio_producto = True
                             fin_producto = False
                             datos = ''
-                        #print(f"\nTITULO: {subtitulos[len(subtitulos)-1]}")
                     
                     #Get SKUs
                     elif sku_pattern.findall(text):
@@ -70,11 +62,6 @@ def extraer_informacion(page):
                         sku = sku.replace(".","")
                         skus.append(sku)
                         fin_producto = True
-
-                    # elif sku_pattern_2.findall(text):
-                    #     sku = sku_pattern_2.findall(text)[0]
-                    #     sku = sku.replace(".","")
-                    #     skus.append(sku)
                     
                     #Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
@@ -88,15 +75,7 @@ def extraer_informacion(page):
                     #Get Info prodcuto
                     else:
                         datos += " " + text
-                    # elif inicio_producto:
-                    #     if fin_producto or len(info) == 0:
-                    #         info.append(text)
-                    #         fin_producto = False
-                    #     else:
-                    #         word = ' ' + text
-                    #         info[len(info)-1] += word
-
-
+                    
                     text_buffer = text
 
 def extraer_imagenes_orden(output_imagenes, page, doc):
@@ -106,7 +85,8 @@ def extraer_imagenes_orden(output_imagenes, page, doc):
     for img in images:
         xref = img['xref']
         if xref > 0:
-            if img['width'] > 500 and img['height'] > 500:
+            print(f"width: {img['width']} height: {img['height']}")
+            if img['width'] > 495 and img['height'] > 495:
                 bbox_img = img['bbox']
                 imagenes.append((xref, bbox_img))
     
@@ -129,21 +109,39 @@ def extraer_imagenes_orden(output_imagenes, page, doc):
 
 def get_urls(page):
     links = page.get_links()
+    urls_with_rect = []
+
+    # Extraer URL y Rect de cada link y almacenar en lista de tuplas
     for link in links:
-        url = link['uri']
-        url = url.replace("https://www.elektra.mx/", "")
-        url = url.replace(":","-")
-        url = url.replace("/", "-")
-        url = url.replace("?", "-")
-        url = url.replace("%", "-")
+        if 'uri' in link and 'from' in link:
+            url = link['uri']
+            rect = link['from']
+            coordenadas = [rect[0], rect[1], rect[2], rect[3]]
+            # Limpiar el URL según tu lógica actual
+            url = url.replace("https://www.elektra.mx/", "")
+            url = url.replace("/","-")
+            url = url.replace("?", "-")
+            url = url.replace("=", "-")
+            url = url.replace("#", "-")
+            url = url.replace(":", "-")
+            urls_with_rect.append((url, coordenadas))
+
+    # Ordenar los URLs basados en las coordenadas rectangulares (x, y)
+    # La clave de ordenación podría ser: primero en el eje Y, luego en el eje X
+    urls_sorted = sorted(urls_with_rect, key=lambda x: (x[1][1], x[1][0]))
+
+    # Extraer solo los URLs ya ordenados
+    urls_sor = [url for url, _ in urls_sorted]
+    for url in urls_sor:
         urls.append(url)
+    
 
 def guardar_informacion(output_arhivos, name_file, data):
-    # if len(name_file) > 170:
-    #     filepath = f"{output_arhivos}/dummy{len(name_file)}.txt"
-    # else:
-    #     filepath = f"{output_arhivos}/{name_file}.txt"
-    filepath = f"{output_arhivos}/{name_file}.txt"
+    if len(name_file) > 173:
+        filepath = f"{output_arhivos}/dummy{len(name_file)}.txt"
+    else:
+        filepath = f"{output_arhivos}/{name_file}.txt"
+    # filepath = f"{output_arhivos}/{name_file}.txt"
     with open(filepath, "w", encoding="utf-8") as archivo:
         for dato in data:
             archivo.write(dato + "\n")
@@ -175,21 +173,23 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
         skus.clear()
         vigencias.clear()
 
+        #Extraccion de informacion
         extraer_informacion(page)
-        get_urls(page)
-        extraer_imagenes_orden(output_imagenes, page, doc)
 
-        if len(titulos) == 0:
+        #Se rompe cuando no se encuentran productos
+        if len(titulos) == 0 or len(info) == 0:
             break
+        
+        #Extraccion de Urls
+        get_urls(page)
+        
+        #Extraccion de imagenes
+        extraer_imagenes_orden(output_imagenes, page, doc)
 
         ruta_directorio = os.path.join(ruta_base, 'archivos_dummy', f'{titulos[0]}')
         os.makedirs(ruta_directorio, exist_ok=True)
-        # print(f"\n-------------")
-        # print(f"LEN DE INFO: {len(info)}")
-        # print(f"LEN DE SKU: {len(skus)}")
-        # print(f"LEN DE VIGENCIAS: {len(vigencias)}")
-        # print("-------------")
 
+        #Guardado de informacion 
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
@@ -209,7 +209,3 @@ def procesar_pdf(pdf_path, output_imagenes, output_archivos):
         doc_pagina.save(nombre_archivo_salida)
 
         doc_pagina.close()
-    
-        # doc.close()
-        # nuevo_nombre = f"./archivos_pdf/{titulos[0]}.pdf"
-        # os.rename(pdf_path, nuevo_nombre)
