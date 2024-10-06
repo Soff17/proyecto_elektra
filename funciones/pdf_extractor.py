@@ -110,7 +110,7 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc):
     for img in images:
         xref = img['xref']
         if xref > 0:
-            if img['width'] > 500 and img['height'] > 500:
+            if img['width'] > 495 and img['height'] > 495:
                 bbox_img = img['bbox']
                 imagenes.append((xref, bbox_img))
     
@@ -126,10 +126,15 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc):
             image_name = f"{skus[count]}.{ext}"
         else:
             image_name = f"producto_{count+1}.{ext}"
+
+        # Guardar la imagen localmente en lugar de subirla al bucket
+        ruta_imagen = os.path.join('./imagenes', image_name)
+        with open(ruta_imagen, "wb") as f:
+            f.write(image_bytes)
         
         # Subir la imagen directamente desde el buffer al bucket
         image_buffer = io.BytesIO(image_bytes)
-        st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
+        #st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
 
         print(f"Imagen {image_name} subida exitosamente al bucket.")
         count += 1
@@ -173,8 +178,21 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
     from funciones import watson_discovery as wd  # Importar Watson Discovery
     
     # Usar una función similar a `añadir_documento` para subir el contenido
-    wd.añadir_documento_desde_contenido(contenido_txt, f"{titulo} {name_file}.txt", 'text/plain')
+    # wd.añadir_documento_desde_contenido(contenido_txt, f"{titulo} {name_file}.txt", 'text/plain')
     print(f'se está subiendo "{titulo} {name_file}.txt"')
+
+     # Crear el directorio si no existe
+    if not os.path.exists('./output_files'):
+        os.makedirs('./output_files')
+
+    # Definir la ruta completa del archivo
+    file_path = os.path.join('./output_files', f"{titulo} {name_file}.txt")
+
+    # Guardar el contenido en un archivo local
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write(contenido_txt)
+
+    print(f'Archivo guardado localmente: "{file_path}"')
         
 def particion_pdf(pdf_path, output_archivos):
     doc = fitz.open(pdf_path)
@@ -187,6 +205,31 @@ def particion_pdf(pdf_path, output_archivos):
         
     doc_pagina.close()
 
+def match_url_with_sku(urls, skus):
+    """
+    Match URL based on SKU, and if no match is found, return the original URL.
+    """
+    url_assignments = []
+    
+    for i in range(len(skus)):
+        sku = skus[i] if i < len(skus) else None
+        matched_url = None
+        
+        # Try matching by SKU
+        for url in urls:
+            if sku and sku in url:
+                matched_url = url
+                break
+
+        # If no match, just use the original URL at the same index
+        if not matched_url and i < len(urls):
+            matched_url = urls[i]
+        elif not matched_url:
+            matched_url = f"dummy-url-for-sku-{sku if sku else 'unknown'}"
+
+        url_assignments.append(matched_url)
+    
+    return url_assignments
 
 def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
     # Abre el PDF desde el buffer en memoria
@@ -210,15 +253,15 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         get_urls(page)
         extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc)
 
-        if len(titulos) == 0:
-            break
+        # Call the SKU-based matching function to get the correct URLs
+        assigned_urls = match_url_with_sku(urls, skus)
 
-        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
+        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(assigned_urls))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             content = info[i] if i < len(info) else ""
-            url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
+            url = assigned_urls[i] if i < len(assigned_urls) else f"{page_num}_Dummy{i}"
 
             if sku:
                 sku_num = "Sku: " + sku
@@ -230,14 +273,13 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         doc_pagina.insert_pdf(doc, from_page=page_num, to_page=page_num)
         nombre_archivo_pdf = f"{titulos[0].replace(' ', '_')}.pdf"
 
-
         # Crear un buffer de bytes
         pdf_buffer_output = io.BytesIO()
         doc_pagina.save(pdf_buffer_output)
         pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
 
         # Subir el PDF directamente desde el buffer al bucket llamando a la función de tu script de storage
-        st.upload_pdf_buffer(bucket_name, carpeta_pdfs_bucket, nombre_archivo_pdf, pdf_buffer_output)
+        # st.upload_pdf_buffer(bucket_name, carpeta_pdfs_bucket, nombre_archivo_pdf, pdf_buffer_output)
 
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
