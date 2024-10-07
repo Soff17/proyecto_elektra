@@ -159,7 +159,6 @@ def get_urls(page):
             urls_with_rect.append((url, coordenadas))
 
     # Ordenar los URLs basados en las coordenadas rectangulares (x, y)
-    # La clave de ordenación podría ser: primero en el eje Y, luego en el eje X
     urls_sorted = sorted(urls_with_rect, key=lambda x: (x[1][1], x[1][0]))
 
     # Extraer solo los URLs ya ordenados
@@ -205,23 +204,20 @@ def particion_pdf(pdf_path, output_archivos):
         
     doc_pagina.close()
 
-def match_url_with_sku(urls, skus):
-    """
-    Match URL based on SKU, and if no match is found, return the original URL.
-    """
+def coincidir_url_con_sku(urls, skus):
     url_assignments = []
     
     for i in range(len(skus)):
         sku = skus[i] if i < len(skus) else None
         matched_url = None
         
-        # Try matching by SKU
+        # Coincidencia con SKU
         for url in urls:
             if sku and sku in url:
                 matched_url = url
                 break
 
-        # If no match, just use the original URL at the same index
+        # Sino coincide con SKU, dejar el que encontró originalmente
         if not matched_url and i < len(urls):
             matched_url = urls[i]
         elif not matched_url:
@@ -253,8 +249,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         get_urls(page)
         extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc)
 
-        # Call the SKU-based matching function to get the correct URLs
-        assigned_urls = match_url_with_sku(urls, skus)
+        assigned_urls = coincidir_url_con_sku(urls, skus)
 
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(assigned_urls))):
             sku = skus[i] if i < len(skus) else ""
