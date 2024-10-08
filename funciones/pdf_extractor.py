@@ -22,108 +22,102 @@ def nombre_de_categoria(font_size, font_flags):
     return False
 
 def nombre_del_producto(font_size, font_flags):
-    if (font_size > 34.0 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
+    if (font_size > 27 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
         return True
     return False
 
 def extraer_informacion(page):
-    blocks = page.get_text("dict",sort=True)["blocks"]
+    blocks = page.get_text("dict", sort=True)["blocks"]
     text_buffer = ''
     inicio_producto = False
     fin_producto = False
     datos = ''
+    sku_positions = []
 
     for block in blocks:
         if 'lines' in block:
             for line in block['lines']:
                 for span in line['spans']:
-
                     text = span['text'].strip()
                     text_size = span['size']
                     text_flags = span['flags']
+                    text_y_position = span['bbox'][1]  # Obtener la posición Y del texto
 
-                    # print("\n-------------")
-                    # print(f"Text Size: {text_size}")
-                    # print(f"Text flags: {text_flags}")
-                    # print(f"Text: {text}")
-                    # print(f"Text buffer: {text_buffer}")
-                    # print("-------------")
-
-                    # Get nombre de categoria
-                    if nombre_de_categoria(text_size, text_flags) and inicio_producto == False:
+                    # Get nombre de categoría
+                    if nombre_de_categoria(text_size, text_flags) and not inicio_producto:
                         text = text.replace(" ", "_")
                         if text_buffer in titulos:
-                            titulos[len(titulos)-1] += " " + text
+                            titulos[-1] += " " + text
                         else:
                             titulos.append(text)
 
-                    #Get nombre de prodcuto
+                    # Get nombre de producto
                     elif nombre_del_producto(text_size, text_flags):
                         if inicio_producto:
-                            subtitulos[len(subtitulos)-1] += " " + text
+                            subtitulos[-1] += " " + text
                         else:
                             subtitulos.append(text)
                             inicio_producto = True
                             fin_producto = False
                             datos = ''
-                        #print(f"\nTITULO: {subtitulos[len(subtitulos)-1]}")
-                    
-                    #Get SKUs
+
+                    # Get SKUs
                     elif sku_pattern.findall(text):
-                        sku = sku_pattern.findall(text)[0]
-                        sku = sku.replace(".","")
+                        sku = sku_pattern.findall(text)[0].replace(".", "")
                         skus.append(sku)
+                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
                         fin_producto = True
 
-                    # elif sku_pattern_2.findall(text):
-                    #     sku = sku_pattern_2.findall(text)[0]
-                    #     sku = sku.replace(".","")
-                    #     skus.append(sku)
-                    
-                    #Get Vigencias
+                    elif sku_pattern_2.findall(text):
+                        sku = sku_pattern_2.findall(text)[0].replace(".", "")
+                        skus.append(sku)
+                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                        fin_producto = True
+                        inicio_producto = True
+                        subtitulos.append("Producto")
+
+                    # Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
                         vigencias.append(text)
-                        #print(f"\nINSERT DATOS:\n{datos}")
                         info.append(datos)
-                        datos=""
+                        datos = ""
                         fin_producto = False
                         inicio_producto = False
-                        
-                    #Get Info prodcuto
+
+                    # Get Info producto
                     else:
                         datos += " " + text
-                    # elif inicio_producto:
-                    #     if fin_producto or len(info) == 0:
-                    #         info.append(text)
-                    #         fin_producto = False
-                    #     else:
-                    #         word = ' ' + text
-                    #         info[len(info)-1] += word
-
 
                     text_buffer = text
 
-def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc):
+    return sku_positions  # Devolver las posiciones de los SKUs para asignar imágenes
+
+def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions):
     images = page.get_image_info(hashes=True, xrefs=True)
     imagenes = []
 
     for img in images:
         xref = img['xref']
         if xref > 0:
-            if img['width'] > 495 and img['height'] > 495:
+            if img['width'] > 311 and img['height'] > 311:
                 bbox_img = img['bbox']
                 imagenes.append((xref, bbox_img))
-    
+
+    # Ordenamos las imágenes por su posición Y en la página
     images_sorted = sorted(imagenes, key=lambda img: img[1][3], reverse=False)
 
+    # Asignar imágenes al SKU más cercano basado en las posiciones
     count = 0
     for xref, bbox in images_sorted:
         base_image = doc.extract_image(xref)
         image_bytes = base_image["image"]
         ext = base_image["ext"]
-        
-        if len(skus) > count:
-            image_name = f"{skus[count]}.{ext}"
+
+        # Encontrar el SKU más cercano basado en la posición Y
+        closest_sku = find_closest_sku(sku_positions, bbox[3])
+
+        if closest_sku:
+            image_name = f"{closest_sku}.{ext}"
         else:
             image_name = f"producto_{count+1}.{ext}"
 
@@ -131,13 +125,26 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc):
         ruta_imagen = os.path.join('./imagenes', image_name)
         with open(ruta_imagen, "wb") as f:
             f.write(image_bytes)
-        
+
         # Subir la imagen directamente desde el buffer al bucket
         image_buffer = io.BytesIO(image_bytes)
-        #st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
+        # st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
 
         print(f"Imagen {image_name} subida exitosamente al bucket.")
         count += 1
+
+def find_closest_sku(sku_positions, image_y_position):
+    # Encuentra el SKU más cercano basado en la posición Y
+    closest_sku = None
+    min_distance = float('inf')
+
+    for sku, sku_position in sku_positions:
+        distance = abs(sku_position - image_y_position)
+        if distance < min_distance:
+            closest_sku = sku
+            min_distance = distance
+
+    return closest_sku
 
 def get_urls(page):
     links = page.get_links()
@@ -241,13 +248,16 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         skus.clear()
         vigencias.clear()
 
-        extraer_informacion(page)
+        # Llamada a extraer_informacion para obtener las posiciones de los SKUs
+        sku_positions = extraer_informacion(page)
 
         if len(titulos) == 0 or len(info) == 0:
             break
 
         get_urls(page)
-        extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc)
+
+        # Pasar sku_positions a la función extraer_imagenes_orden
+        extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc, sku_positions)
 
         assigned_urls = coincidir_url_con_sku(urls, skus)
 
