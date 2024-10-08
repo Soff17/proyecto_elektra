@@ -19,7 +19,7 @@ def nombre_de_categoria(font_size, font_flags):
     return False
 
 def nombre_del_producto(font_size, font_flags):
-    if (font_size > 34.0 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
+    if (font_size > 27 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
         return True
     return False
 
@@ -54,7 +54,7 @@ def extraer_informacion(page):
                             subtitulos.append(text)
                             inicio_producto = True
                             fin_producto = False
-                            datos = ''
+                            datos = ''                        
                     
                     #Get SKUs
                     elif sku_pattern.findall(text):
@@ -63,10 +63,17 @@ def extraer_informacion(page):
                         skus.append(sku)
                         fin_producto = True
                     
+                    elif sku_pattern_2.findall(text):
+                        sku = sku_pattern_2.findall(text)[0]
+                        sku = sku.replace(".","")
+                        skus.append(sku)
+                        fin_producto = True
+                        inicio_producto = True
+                        subtitulos.append("Producto")
+                    
                     #Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
                         vigencias.append(text)
-                        #print(f"\nINSERT DATOS:\n{datos}")
                         info.append(datos)
                         datos=""
                         fin_producto = False
@@ -85,8 +92,7 @@ def extraer_imagenes_orden(output_imagenes, page, doc):
     for img in images:
         xref = img['xref']
         if xref > 0:
-            print(f"width: {img['width']} height: {img['height']}")
-            if img['width'] > 495 and img['height'] > 495:
+            if img['width'] > 311 and img['height'] > 311:
                 bbox_img = img['bbox']
                 imagenes.append((xref, bbox_img))
     
@@ -159,7 +165,6 @@ def particion_pdf(pdf_path, output_archivos):
 
 
 def procesar_pdf(pdf_path, output_imagenes, output_archivos):
-    print(pdf_path)
     doc = fitz.open(pdf_path)
     ruta_base = os.getcwd()
 
