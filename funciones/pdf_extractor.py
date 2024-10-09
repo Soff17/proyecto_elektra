@@ -19,7 +19,7 @@ def nombre_de_categoria(font_size, font_flags):
     return False
 
 def nombre_del_producto(font_size, font_flags):
-    if (font_size > 27 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
+    if (font_size > 31 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
         return True
     return False
 
@@ -137,9 +137,24 @@ def get_urls(page):
     urls_sorted = sorted(urls_with_rect, key=lambda x: (x[1][1], x[1][0]))
 
     # Extraer solo los URLs ya ordenados
-    urls_sor = [url for url, _ in urls_sorted]
-    for url in urls_sor:
-        urls.append(url)
+    urls_sorted = [url for url, _ in urls_sorted]
+    
+    for i in range(len(skus)):
+        sku = skus[i]
+        matched_url = None
+
+        for url in urls_sorted:
+            if sku in url:
+                matched_url = url
+                break
+        
+        if not matched_url and i < len(urls):
+            matched_url = urls[i]
+        elif not matched_url:
+            matched_url = f"dummy-url-for-sku-{sku if sku else 'unknown'}"
+
+        urls.append(matched_url)
+
     
 
 def guardar_informacion(output_arhivos, name_file, data):
