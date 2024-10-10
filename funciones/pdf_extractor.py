@@ -22,7 +22,7 @@ def nombre_de_categoria(font_size, font_flags):
     return False
 
 def nombre_del_producto(font_size, font_flags):
-    if (font_size > 27 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
+    if (font_size > 31 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
         return True
     return False
 
@@ -165,13 +165,27 @@ def get_urls(page):
             url = url.replace(":", "-")
             urls_with_rect.append((url, coordenadas))
 
-    # Ordenar los URLs basados en las coordenadas rectangulares (x, y)
+    # La clave de ordenación podría ser: primero en el eje Y, luego en el eje X
     urls_sorted = sorted(urls_with_rect, key=lambda x: (x[1][1], x[1][0]))
 
     # Extraer solo los URLs ya ordenados
-    urls_sor = [url for url, _ in urls_sorted]
-    for url in urls_sor:
-        urls.append(url)
+    urls_sorted = [url for url, _ in urls_sorted]
+    
+    for i in range(len(skus)):
+        sku = skus[i]
+        matched_url = None
+
+        for url in urls_sorted:
+            if sku in url:
+                matched_url = url
+                break
+        
+        if not matched_url and i < len(urls):
+            matched_url = urls[i]
+        elif not matched_url:
+            matched_url = f"dummy-url-for-sku-{sku if sku else 'unknown'}"
+
+        urls.append(matched_url)
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
@@ -259,14 +273,12 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         # Pasar sku_positions a la función extraer_imagenes_orden
         extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc, sku_positions)
 
-        assigned_urls = coincidir_url_con_sku(urls, skus)
-
-        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(assigned_urls))):
+        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             content = info[i] if i < len(info) else ""
-            url = assigned_urls[i] if i < len(assigned_urls) else f"{page_num}_Dummy{i}"
+            url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
 
             if sku:
                 sku_num = "Sku: " + sku
