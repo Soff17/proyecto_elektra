@@ -45,26 +45,29 @@ def procesar_y_subir():
         pdf_buffer = io.BytesIO(pdf_file.read())
 
         # Paso 1: Eliminar los pdf de Google Cloud Storage
-        st.empty_bucket_folder(bucket_name, carpeta_pdfs_bucket)
+        # st.empty_bucket_folder(bucket_name, carpeta_pdfs_bucket)
 
         # Paso 2: Eliminar las imágenes de Google Cloud Storage
-        st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
+        # st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
 
         # Paso 3: Eliminar documentos
-        wd.eliminar_documentos()
+        # wd.eliminar_documentos()
+        
+        pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
 
         # Paso 4: Esperar a que se hayan eliminado todos los documentos para subir los nuevos a discovery
+        ''''
         while True:
             total_documentos = wd.contar_documentos()
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
+                # pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
                 print("PDF procesado exitosamente.")
                 break
             else:
                 print(f"Aún quedan {total_documentos} documentos. Esperando...")
             time.sleep(5)
-
+        '''
         return jsonify({"message": "Proceso completo: documentos eliminados, PDF procesado, archivos e imágenes subidas"}), 200
 
     except Exception as e:
@@ -73,7 +76,7 @@ def procesar_y_subir():
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5001, debug=True)
 
-''''
+'''''
 import os
 import mimetypes
 import re
@@ -188,6 +191,7 @@ def eliminar_documentos():
                     future.result()
 
         offset += page_limit
+
 def contar_documentos():
     try:
         # Hacer la consulta para obtener el número total de documentos
