@@ -4,6 +4,9 @@ import os
 from funciones import watson_discovery as wd
 from funciones import image_storage as st
 import io
+import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.drawing.image import Image as ExcelImage
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia: \s*(\S+)')
@@ -15,6 +18,15 @@ info = []
 urls = []
 skus = []
 vigencias = []
+
+# Definir listas para almacenar la información que vamos a exportar
+data_reporte = {
+    'SKU': [],
+    'Subtítulo': [],
+    'Descripción': [],
+    'Vigencia': [],
+    'URL': []
+}
 
 def nombre_de_categoria(font_size, font_flags):
     if (font_size > 43) and font_flags == 20:
@@ -231,6 +243,17 @@ def particion_pdf(pdf_path, output_archivos):
         
     doc_pagina.close()
 
+def ajustar_longitudes_listas():
+    # Encontrar la longitud máxima entre todas las listas
+    max_length = max(len(skus), len(subtitulos), len(info), len(vigencias), len(urls))
+
+    # Rellenar con valores vacíos en caso de que alguna lista sea más corta
+    skus.extend([""] * (max_length - len(skus)))
+    subtitulos.extend([""] * (max_length - len(subtitulos)))
+    info.extend([""] * (max_length - len(info)))
+    vigencias.extend([""] * (max_length - len(vigencias)))
+    urls.extend([""] * (max_length - len(urls)))
+
 def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
@@ -268,6 +291,10 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 data = [subtitulo, sku_num, content, vigencia]
                 guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
+        # Generar un reporte Excel para cada categoría
+        if len(titulos) > 0:
+            generar_reporte_excel(titulos[0])
+
         # Partición pdf, se guarda en un buffer en lugar de archivo físico
         doc_pagina = fitz.open()
         doc_pagina.insert_pdf(doc, from_page=page_num, to_page=page_num)
@@ -293,3 +320,82 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
         doc_pagina.close()
+
+def generar_reporte_excel(titulo_categoria):
+    # Ajustar las longitudes de las listas antes de generar el reporte
+    ajustar_longitudes_listas()
+
+    # Convertir los datos almacenados en un DataFrame de pandas
+    df = pd.DataFrame({
+        'SKU': skus,
+        'Subtítulo': subtitulos,
+        'Descripción': info,
+        'Vigencia': vigencias,
+        'URL': urls
+    })
+
+    # Añadir la columna "URL Coincide con SKU"
+    df['URL Coincide con SKU'] = df.apply(lambda row: row['SKU'] in row['URL'], axis=1)
+
+    # Añadir una columna que indique si el SKU tiene una imagen asociada
+    def tiene_imagen(sku):
+        extensiones_imagen = ['jpeg']
+        for ext in extensiones_imagen:
+            if os.path.exists(f"./imagenes/{sku}.{ext}"):
+                return True
+        return False
+
+    df['Tiene Imagen'] = df['SKU'].apply(tiene_imagen)
+
+    # Crear un nombre de archivo único para cada categoría
+    nombre_archivo_excel = f"./reportes/reporte_{titulo_categoria.replace(' ', '_')}.xlsx"
+
+    # Guardar el DataFrame como archivo Excel sin imágenes aún
+    df.to_excel(nombre_archivo_excel, index=False)
+
+    # Cargar el archivo Excel generado con openpyxl
+    workbook = load_workbook(nombre_archivo_excel)
+    sheet = workbook.active
+
+    # Ajustar el ancho de las columnas para "SKU", "URL Coincide con SKU" y "Tiene Imagen"
+    col_sku = 1
+    col_url_coincide = sheet.max_column - 1
+    col_tiene_imagen = sheet.max_column 
+
+    # Ajustar los anchos de las columnas
+    sheet.column_dimensions[sheet.cell(row=1, column=col_sku).column_letter].width = 30 
+    sheet.column_dimensions[sheet.cell(row=1, column=col_url_coincide).column_letter].width = 30
+    sheet.column_dimensions[sheet.cell(row=1, column=col_tiene_imagen).column_letter].width = 30
+
+    # Añadir imágenes a una nueva columna al final
+    col_img = sheet.max_column + 1
+    sheet.cell(row=1, column=col_img).value = "Imagen"
+
+    # Añadir imágenes en la nueva columna para cada SKU
+    for index, sku in enumerate(skus, start=2):
+        imagen_path = None
+        extensiones_imagen = ['jpeg']
+        for ext in extensiones_imagen:
+            imagen_path = f"./imagenes/{sku}.{ext}"
+            if os.path.exists(imagen_path):
+                break
+
+        if imagen_path and os.path.exists(imagen_path):
+            # Insertar la imagen en la última columna para cada fila
+            img = ExcelImage(imagen_path)
+            img.width = 100
+            img.height = 100
+
+            # Calcular la altura de la fila según el alto de la imagen
+            fila = index
+            altura_fila = img.height * 0.75  
+            sheet.row_dimensions[fila].height = altura_fila 
+
+            img_anchor = sheet.cell(row=fila, column=col_img).coordinate 
+            sheet.add_image(img, img_anchor)
+
+    # Guardar el archivo Excel con las imágenes insertadas
+    workbook.save(nombre_archivo_excel)
+
+    print(f'Reporte generado y guardado en: {nombre_archivo_excel}')
+

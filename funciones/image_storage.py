@@ -3,7 +3,13 @@ from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor
 
 def initialize_storage_client():
-    return storage.Client.from_service_account_json('')
+    # Obtener la ruta del JSON desde el .env
+    json_path = os.getenv('STORAGE_SERVICE_ACCOUNT_JSON_PATH')
+    if not json_path:
+        raise ValueError("La ruta del archivo JSON no está definida en el archivo .env")
+    
+    client = storage.Client.from_service_account_json(json_path)
+    return client
 
 # Función para vaciar la carpeta de imagenes_subidas en lugar de todo el bucket
 def empty_bucket_folder(bucket_name, folder_name):
@@ -33,7 +39,7 @@ def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
     file_paths = [
         os.path.join(folder_path, filename)
         for filename in os.listdir(folder_path)
-        if os.path.isfile(os.path.join(folder_path, filename))
+        if filename.lower().endswith(('.jpeg')) and os.path.isfile(os.path.join(folder_path, filename))
     ]
 
     # Usar ThreadPoolExecutor para subir las imágenes en paralelo
@@ -58,7 +64,7 @@ def count_images_in_bucket(bucket_name, folder_name):
     blobs = list(bucket.list_blobs(prefix=folder_name))
     
     # Filtrar solo imágenes por su tipo MIME (esto depende del formato de imágenes que estés utilizando, por ejemplo, PNG o JPG)
-    image_count = sum(1 for blob in blobs if blob.name.endswith(('.png', '.jpg', '.jpeg', '.gif')))
+    image_count = sum(1 for blob in blobs if blob.name.endswith(('.jpeg')))
     
     print(f"La carpeta '{folder_name}' en el bucket '{bucket_name}' contiene {image_count} imágenes.")
     return image_count
