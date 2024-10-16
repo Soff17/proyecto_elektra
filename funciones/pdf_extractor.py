@@ -31,18 +31,12 @@ def nombre_del_producto(font_size, font_flags):
         return True
     return False
 
-def precio_del_producto(font_size, font_flags):
-    if(font_size == 20) and (font_flags == 4):
-        return True
-    return False
-
 def extraer_informacion(page):
     blocks = page.get_text("dict", sort=True)["blocks"]
 
     inicio_productos = False
     inicio_producto = False
     fin_producto = False
-    # sku2_pattern = False
     datos = ''
     sku_positions = []
 
