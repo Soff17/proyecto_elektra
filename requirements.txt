@@ -1,4 +1,9 @@
 ibm-watson
+ibm-cloud-sdk-core
 requests
 PyMuPDF
 python-dotenv
+fastapi
+uvicorn
+flask-cors
+google-cloud-storage
