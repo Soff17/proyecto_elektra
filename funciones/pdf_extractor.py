@@ -12,6 +12,8 @@ delete_pattern = re.compile(r'(Da clic aquí)s?')
 delete_pattern2 = re.compile(r'(¡Cómpralo ya!)s?')
 precio_pattern = re.compile(r'Contado\s*(\S+)')
 precio_pattern2 = re.compile(r'^\$\d{1,3}(,\d{3})+(\.\d{2})?$', re.MULTILINE)
+bono_pattern = re.compile(r'(¡ B O N O  D E  R E G A L O)s?')
+bono_pattern2 = re.compile(r'D E\s*(.+)')
 
 titulos = []
 subtitulos = []
@@ -20,6 +22,7 @@ urls = []
 skus = []
 vigencias = []
 precios = []
+cupones = []
 
 def nombre_de_categoria(font_size, font_flags):
     if (font_size > 43) and font_flags == 20:
@@ -48,6 +51,10 @@ def extraer_informacion(page):
                     text_size = span['size']
                     text_flags = span['flags']
                     text_y_position = span['bbox'][1]  # Obtener la posición Y del texto
+
+                    # print("----------------")
+                    # print(text)
+                    # print("----------------")
 
                     # Get nombre de categoría
                     if nombre_de_categoria(text_size, text_flags) and not inicio_productos:
@@ -97,8 +104,22 @@ def extraer_informacion(page):
                     
                     # Get Precio precio_del_producto(text_size, text_flags)
                     elif precio_pattern2.findall(text):
-                        print(text)
                         precios.append(f"Pago de contado: {text}")
+
+                    # Get el cupon
+                    elif bono_pattern.findall(text):
+                        cupones.append(text)
+
+                    elif bono_pattern2.findall(text):
+                        texto_original = cupones[-1] + " " + text
+                        texto_sin_espacios = re.sub(r'\s(?=[A-Za-z0-9])', '', texto_original)
+                        texto_intermedio = re.sub(r'\s+\$', ' $', texto_sin_espacios)
+                        texto_corregido = re.sub(r'RegaloDe', 'Regalo de', texto_intermedio, flags=re.IGNORECASE)
+                        texto_sin_caracteres_especiales = re.sub(r'[!¡*]', '', texto_corregido).strip()
+                        texto_final = texto_sin_caracteres_especiales.lower()
+                        texto_final = 'Bono' + texto_final[4:]
+
+                        cupones[-1] = texto_final
 
                     # Get Info producto
                     else:
@@ -287,10 +308,11 @@ def procesar_pdf(pdf_buffer):
             precio = precios[i] if i < len(precios) else ""
             url = assigned_urls[i] if i < len(assigned_urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {titulos[0]}"
+            cupon = cupones[i] if i < len(cupones) else ""
 
             if sku:
                 sku_num = "Sku: " + sku
-                data = [sku_num, categoria, subtitulo, content, precio, vigencia]
+                data = [sku_num, categoria, subtitulo, cupon, content, precio, vigencia]
                 guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
         # Partición pdf, se guarda en un buffer en lugar de archivo físico
