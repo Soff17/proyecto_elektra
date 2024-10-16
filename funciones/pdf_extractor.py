@@ -9,8 +9,11 @@ from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as ExcelImage
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
-sku_pattern_2 = re.compile(r'Sku de referencia: \s*(\S+)')
+sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
 vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
+delete_pattern = re.compile(r'(Da clic aquí)s?')
+delete_pattern2 = re.compile(r'(¡Cómpralo ya!)s?')
+precio_pattern = re.compile(r'Contado\s*(\S+)')
 
 titulos = []
 subtitulos = []
@@ -18,6 +21,7 @@ info = []
 urls = []
 skus = []
 vigencias = []
+precios = []
 
 # Definir listas para almacenar la información que vamos a exportar
 data_reporte = {
@@ -38,9 +42,15 @@ def nombre_del_producto(font_size, font_flags):
         return True
     return False
 
+def precio_del_producto(font_size, font_flags):
+    if(font_size == 20) and (font_flags == 4):
+        return True
+    return False
+
 def extraer_informacion(page):
     blocks = page.get_text("dict", sort=True)["blocks"]
-    text_buffer = ''
+
+    inicio_productos = False
     inicio_producto = False
     fin_producto = False
     datos = ''
@@ -58,7 +68,7 @@ def extraer_informacion(page):
                     # Get nombre de categoría
                     if nombre_de_categoria(text_size, text_flags) and not inicio_producto:
                         text = text.replace(" ", "_")
-                        if text_buffer in titulos:
+                        if not inicio_productos and len(titulos) > 0:
                             titulos[-1] += " " + text
                         else:
                             titulos.append(text)
@@ -70,8 +80,8 @@ def extraer_informacion(page):
                         else:
                             subtitulos.append(text)
                             inicio_producto = True
-                            fin_producto = False
                             datos = ''
+                        inicio_productos = True
 
                     # Get SKUs
                     elif sku_pattern.findall(text):
@@ -87,6 +97,7 @@ def extraer_informacion(page):
                         fin_producto = True
                         inicio_producto = True
                         subtitulos.append("Producto")
+                        precios.append(f"Precio: SA")
 
                     # Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
@@ -96,9 +107,18 @@ def extraer_informacion(page):
                         fin_producto = False
                         inicio_producto = False
 
+                    elif delete_pattern.findall(text) or delete_pattern2.findall(text) or precio_pattern.findall(text):
+                        continue
+
+                    elif precio_del_producto(text_size, text_flags):
+                        precios.append(f"Precio: {text}")
+
                     # Get Info producto
                     else:
-                        datos += " " + text
+                        if datos == '':
+                            datos = text
+                        else:
+                            datos += " " + text
 
                     text_buffer = text
 
@@ -267,6 +287,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         urls.clear()
         skus.clear()
         vigencias.clear()
+        precios.clear()
 
         # Llamada a extraer_informacion para obtener las posiciones de los SKUs
         sku_positions = extraer_informacion(page)
@@ -279,16 +300,17 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         # Pasar sku_positions a la función extraer_imagenes_orden
         extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc, sku_positions)
 
-        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls))):
+        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls), len(precios))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             content = info[i] if i < len(info) else ""
+            precio = precios[i] if i < len(precios) else ""
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
 
             if sku:
                 sku_num = "Sku: " + sku
-                data = [subtitulo, sku_num, content, vigencia]
+                data = [subtitulo, sku_num, content, precio, vigencia]
                 guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
         # Generar un reporte Excel para cada categoría
