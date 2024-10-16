@@ -11,7 +11,7 @@ vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
 delete_pattern = re.compile(r'(Da clic aquí)s?')
 delete_pattern2 = re.compile(r'(¡Cómpralo ya!)s?')
 precio_pattern = re.compile(r'Contado\s*(\S+)')
-# precio_pattern2 = re.compile(r'')
+precio_pattern2 = re.compile(r'^\$\d{1,3}(,\d{3})+(\.\d{2})?$', re.MULTILINE)
 
 titulos = []
 subtitulos = []
@@ -101,8 +101,9 @@ def extraer_informacion(page):
                     elif delete_pattern.findall(text) or delete_pattern2.findall(text) or precio_pattern.findall(text):
                         continue
                     
-                    # Get Precio
-                    elif precio_del_producto(text_size, text_flags):
+                    # Get Precio precio_del_producto(text_size, text_flags)
+                    elif precio_pattern2.findall(text):
+                        print(text)
                         precios.append(f"Pago de contado: {text}")
 
                     # Get Info producto
