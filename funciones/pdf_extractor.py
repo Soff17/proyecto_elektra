@@ -1,13 +1,17 @@
 import fitz
 import re
 import os
-from funciones import watson_discovery as wd
-from funciones import image_storage as st
+# from funciones import watson_discovery as wd
+# from funciones import image_storage as st
 import io
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
-sku_pattern_2 = re.compile(r'Sku de referencia: \s*(\S+)')
+sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
 vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
+delete_pattern = re.compile(r'(Da clic aquí)s?')
+delete_pattern2 = re.compile(r'(¡Cómpralo ya!)s?')
+precio_pattern = re.compile(r'Contado\s*(\S+)')
+# precio_pattern2 = re.compile(r'')
 
 titulos = []
 subtitulos = []
@@ -15,6 +19,7 @@ info = []
 urls = []
 skus = []
 vigencias = []
+precios = []
 
 def nombre_de_categoria(font_size, font_flags):
     if (font_size > 43) and font_flags == 20:
@@ -22,15 +27,22 @@ def nombre_de_categoria(font_size, font_flags):
     return False
 
 def nombre_del_producto(font_size, font_flags):
-    if (font_size > 27 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
+    if (font_size > 31.5 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
+        return True
+    return False
+
+def precio_del_producto(font_size, font_flags):
+    if(font_size == 20) and (font_flags == 4):
         return True
     return False
 
 def extraer_informacion(page):
     blocks = page.get_text("dict", sort=True)["blocks"]
-    text_buffer = ''
+
+    inicio_productos = False
     inicio_producto = False
     fin_producto = False
+    # sku2_pattern = False
     datos = ''
     sku_positions = []
 
@@ -44,9 +56,9 @@ def extraer_informacion(page):
                     text_y_position = span['bbox'][1]  # Obtener la posición Y del texto
 
                     # Get nombre de categoría
-                    if nombre_de_categoria(text_size, text_flags) and not inicio_producto:
+                    if nombre_de_categoria(text_size, text_flags) and not inicio_productos:
                         text = text.replace(" ", "_")
-                        if text_buffer in titulos:
+                        if not inicio_productos and len(titulos) > 0:
                             titulos[-1] += " " + text
                         else:
                             titulos.append(text)
@@ -58,8 +70,8 @@ def extraer_informacion(page):
                         else:
                             subtitulos.append(text)
                             inicio_producto = True
-                            fin_producto = False
                             datos = ''
+                        inicio_productos = True
 
                     # Get SKUs
                     elif sku_pattern.findall(text):
@@ -75,24 +87,34 @@ def extraer_informacion(page):
                         fin_producto = True
                         inicio_producto = True
                         subtitulos.append("Producto")
+                        precios.append(f"Pago de contado: SA")
 
                     # Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
                         vigencias.append(text)
                         info.append(datos)
-                        datos = ""
+                        datos = ''
                         fin_producto = False
                         inicio_producto = False
 
+                    # Delete info extra
+                    elif delete_pattern.findall(text) or delete_pattern2.findall(text) or precio_pattern.findall(text):
+                        continue
+                    
+                    # Get Precio
+                    elif precio_del_producto(text_size, text_flags):
+                        precios.append(f"Pago de contado: {text}")
+
                     # Get Info producto
                     else:
-                        datos += " " + text
-
-                    text_buffer = text
+                        if datos == '':
+                            datos = text
+                        else:
+                            datos += " " + text
 
     return sku_positions  # Devolver las posiciones de los SKUs para asignar imágenes
 
-def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions):
+def extraer_imagenes_orden(page, doc, sku_positions):
     images = page.get_image_info(hashes=True, xrefs=True)
     imagenes = []
 
@@ -181,7 +203,7 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
     contenido_txt = "\n".join(data)
     
     # Subir directamente a IBM Watson Discovery
-    from funciones import watson_discovery as wd  # Importar Watson Discovery
+    #from funciones import watson_discovery as wd  # Importar Watson Discovery
     
     # Usar una función similar a `añadir_documento` para subir el contenido
     # wd.añadir_documento_desde_contenido(contenido_txt, f"{titulo} {name_file}.txt", 'text/plain')
@@ -234,9 +256,9 @@ def coincidir_url_con_sku(urls, skus):
     
     return url_assignments
 
-def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
+def procesar_pdf(pdf_buffer):
     # Abre el PDF desde el buffer en memoria
-    doc = fitz.open(stream=pdf_buffer, filetype="pdf")
+    doc = fitz.open(pdf_buffer)
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
@@ -247,6 +269,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         urls.clear()
         skus.clear()
         vigencias.clear()
+        precios.clear()
 
         # Llamada a extraer_informacion para obtener las posiciones de los SKUs
         sku_positions = extraer_informacion(page)
@@ -257,20 +280,22 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         get_urls(page)
 
         # Pasar sku_positions a la función extraer_imagenes_orden
-        extraer_imagenes_orden(bucket_name, carpeta_imagenes_bucket, page, doc, sku_positions)
+        extraer_imagenes_orden(page, doc, sku_positions)
 
         assigned_urls = coincidir_url_con_sku(urls, skus)
 
-        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(assigned_urls))):
+        for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(assigned_urls), len(precios))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
-            subtitulo = subtitulos[i] if i < len(subtitulos) else ""
-            content = info[i] if i < len(info) else ""
+            subtitulo = f"Producto: {subtitulos[i]}" if i < len(subtitulos) else ""
+            content = f"Descuento: {info[i]}" if i < len(info) else ""
+            precio = precios[i] if i < len(precios) else ""
             url = assigned_urls[i] if i < len(assigned_urls) else f"{page_num}_Dummy{i}"
+            categoria = f"Categoria: {titulos[0]}"
 
             if sku:
                 sku_num = "Sku: " + sku
-                data = [subtitulo, sku_num, content, vigencia]
+                data = [sku_num, categoria, subtitulo, content, precio, vigencia]
                 guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
         # Partición pdf, se guarda en un buffer en lugar de archivo físico
