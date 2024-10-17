@@ -7,6 +7,7 @@ import io
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
+sku_pattern_3 = re.compile(r'Sku´s de referencia:\s*(\S+)')
 vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
 delete_pattern = re.compile(r'(Da clic aquí)s?')
 delete_pattern2 = re.compile(r'(¡Cómpralo ya!)s?')
@@ -50,11 +51,7 @@ def extraer_informacion(page):
                     text = span['text'].strip()
                     text_size = span['size']
                     text_flags = span['flags']
-                    text_y_position = span['bbox'][1]  # Obtener la posición Y del texto
-
-                    # print("----------------")
-                    # print(text)
-                    # print("----------------")
+                    text_y_position = span['bbox'][1]
 
                     # Get nombre de categoría
                     if nombre_de_categoria(text_size, text_flags) and not inicio_productos:
@@ -82,9 +79,20 @@ def extraer_informacion(page):
                         fin_producto = True
 
                     elif sku_pattern_2.findall(text):
-                        sku = sku_pattern_2.findall(text)[0].replace(".", "")
-                        skus.append(sku)
-                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                            sku = sku_pattern_2.findall(text)[0].replace(".", "")
+                            skus.append(sku)
+                            sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                            fin_producto = True
+                            inicio_producto = True
+                            subtitulos.append("Producto")
+                            precios.append(f"Pago de contado: SA")
+                    
+                    elif sku_pattern_3.findall(text):
+                        text = text.replace('Sku´s de referencia: ', '')
+                        skus.append(text)
+                        sku = re.findall(r'\d+', text)
+                        for num in sku:
+                            sku_positions.append((num, text_y_position))
                         fin_producto = True
                         inicio_producto = True
                         subtitulos.append("Producto")
@@ -155,14 +163,17 @@ def extraer_imagenes_orden(page, doc, sku_positions):
         # Encontrar el SKU más cercano basado en la posición Y
         closest_sku = find_closest_sku(sku_positions, bbox[3])
 
-        # if closest_sku:
-        #     image_name = f"{closest_sku}.{ext}"
-        # else:
-        
-        if count < len(skus):
-            image_name = f"{skus[count]}.{ext}"
+        if closest_sku:
+            image_name = f"{closest_sku}.{ext}"
+            sku_positions = [tupla for tupla in sku_positions if tupla[0] != closest_sku]
         else:
             image_name = f"dummy_{count}.{ext}"
+        
+        # if count < len(skus):
+        #     image_name = f"{skus[count]}.{ext}"
+        # else:
+        #     image_name = f"dummy_{count}.{ext}"
+
         # Guardar la imagen localmente en lugar de subirla al bucket
         ruta_imagen = os.path.join('./imagenes', image_name)
         with open(ruta_imagen, "wb") as f:
@@ -185,6 +196,7 @@ def find_closest_sku(sku_positions, image_y_position):
         if distance < min_distance:
             closest_sku = sku
             min_distance = distance
+            sku_positions = [tupla for tupla in sku_positions if tupla[0] != closest_sku]
 
     return closest_sku
 
@@ -312,7 +324,7 @@ def procesar_pdf(pdf_buffer):
             precio = precios[i] if i < len(precios) else ""
             url = assigned_urls[i] if i < len(assigned_urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {titulos[0]}"
-            cupon = cupones[i] if i < len(cupones) else ""
+            cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
 
             if sku:
                 sku_num = "Sku: " + sku
