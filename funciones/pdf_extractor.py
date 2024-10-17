@@ -7,7 +7,6 @@ import io
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as ExcelImage
-from PIL import Image
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -195,13 +194,14 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         count += 1
 
 def find_closest_sku(sku_positions, image_y_position):
-    # Encuentra el SKU más cercano basado en la posición Y
     closest_sku = None
     min_distance = float('inf')
+    # Set a threshold to avoid matching distant images (e.g., set to 200)
+    threshold = 200  
 
     for sku, sku_position in sku_positions:
         distance = abs(sku_position - image_y_position)
-        if distance < min_distance:
+        if distance < min_distance and distance < threshold:
             closest_sku = sku
             min_distance = distance
             sku_positions = [tupla for tupla in sku_positions if tupla[0] != closest_sku]
