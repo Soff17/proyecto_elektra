@@ -14,6 +14,7 @@ vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
 delete_pattern = re.compile(r'(Da clic aquí)s?')
 delete_pattern2 = re.compile(r'(¡Cómpralo ya!)s?')
 precio_pattern = re.compile(r'Contado\s*(\S+)')
+precio_pattern2 = re.compile(r'^\$\d{1,3}(,\d{3})+(\.\d{2})?$', re.MULTILINE)
 
 titulos = []
 subtitulos = []
@@ -39,11 +40,6 @@ def nombre_de_categoria(font_size, font_flags):
 
 def nombre_del_producto(font_size, font_flags):
     if (font_size > 31.5 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
-        return True
-    return False
-
-def precio_del_producto(font_size, font_flags):
-    if(font_size == 20) and (font_flags == 4):
         return True
     return False
 
@@ -97,7 +93,7 @@ def extraer_informacion(page):
                         fin_producto = True
                         inicio_producto = True
                         subtitulos.append("Producto")
-                        precios.append(f"Precio: SA")
+                        precios.append(f"Pago de contado: NA")
 
                     # Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
@@ -110,8 +106,10 @@ def extraer_informacion(page):
                     elif delete_pattern.findall(text) or delete_pattern2.findall(text) or precio_pattern.findall(text):
                         continue
 
-                    elif precio_del_producto(text_size, text_flags):
-                        precios.append(f"Precio: {text}")
+                    # Get Precio precio_del_producto(text_size, text_flags)
+                    elif precio_pattern2.findall(text):
+                        print(text)
+                        precios.append(f"Pago de contado: {text}")
 
                     # Get Info producto
                     else:
@@ -303,14 +301,15 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls), len(precios))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
-            subtitulo = subtitulos[i] if i < len(subtitulos) else ""
-            content = info[i] if i < len(info) else ""
+            subtitulo = f"Producto: {subtitulos[i]}" if i < len(subtitulos) else ""
+            content = f"Pago semanal: {info[i].replace('enganche', 'enganche\nDescuento:')}" if i < len(info) else ""
             precio = precios[i] if i < len(precios) else ""
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
+            categoria = f"Categoria: {titulos[0]}"
 
             if sku:
                 sku_num = "Sku: " + sku
-                data = [subtitulo, sku_num, content, precio, vigencia]
+                data = [sku_num, categoria, subtitulo, content, precio, vigencia]
                 guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
         # Generar un reporte Excel para cada categoría
