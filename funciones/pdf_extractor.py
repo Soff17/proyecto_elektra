@@ -118,7 +118,7 @@ def extraer_informacion(page):
                     elif bono_pattern.findall(text):
                         cupones.append(text)
 
-                    elif bono_pattern2.findall(text):
+                    elif bono_pattern2.findall(text) and len(cupones) > 0:
                         texto_original = cupones[-1] + " " + text
                         texto_sin_espacios = re.sub(r'\s(?=[A-Za-z0-9])', '', texto_original)
                         texto_intermedio = re.sub(r'\s+\$', ' $', texto_sin_espacios)
