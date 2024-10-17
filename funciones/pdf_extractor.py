@@ -302,7 +302,27 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
             subtitulo = f"Producto: {subtitulos[i]}" if i < len(subtitulos) else ""
-            content = f"Pago semanal: {info[i].replace('enganche', 'enganche\nDescuento:')}" if i < len(info) else ""
+            if i < len(info):
+                datos_producto = info[i]
+
+                # Inicializar el contenido con "Pago semanal" al inicio
+                content = f"Pago semanal: {datos_producto}"
+
+                # Verificar si existe "enganche" en el texto
+                if 'enganche' in datos_producto:
+                    content = content.replace('enganche', 'enganche\nDescuento:')
+                
+                # Verificar si existe "pago inicial {cantidad}" en el texto
+                elif re.search(r'pago inicial \d+', datos_producto):
+                    # Insertar el salto de línea antes del descuento después del "pago inicial"
+                    content = re.sub(r'(pago inicial \d+)', r'\1\nDescuento:', content)
+
+                # Quitar cualquier texto adicional como "es la mejor opción para pagar menos"
+                content = content.replace('es la mejor opción para pagar menos', '')
+
+            else:
+                content = ""
+                
             precio = precios[i] if i < len(precios) else ""
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {titulos[0]}"
