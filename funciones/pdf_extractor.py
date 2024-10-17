@@ -10,11 +10,14 @@ from openpyxl.drawing.image import Image as ExcelImage
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
+sku_pattern_3 = re.compile(r'Sku´s de referencia:\s*(\S+)')
 vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
 delete_pattern = re.compile(r'(Da clic aquí)s?')
 delete_pattern2 = re.compile(r'(¡Cómpralo ya!)s?')
 precio_pattern = re.compile(r'Contado\s*(\S+)')
 precio_pattern2 = re.compile(r'^\$\d{1,3}(,\d{3})+(\.\d{2})?$', re.MULTILINE)
+bono_pattern = re.compile(r'(¡ B O N O  D E  R E G A L O)s?')
+bono_pattern2 = re.compile(r'D E\s*(.+)')
 
 titulos = []
 subtitulos = []
@@ -23,6 +26,7 @@ urls = []
 skus = []
 vigencias = []
 precios = []
+cupones = []
 
 # Definir listas para almacenar la información que vamos a exportar
 data_reporte = {
@@ -59,7 +63,7 @@ def extraer_informacion(page):
                     text = span['text'].strip()
                     text_size = span['size']
                     text_flags = span['flags']
-                    text_y_position = span['bbox'][1]  # Obtener la posición Y del texto
+                    text_y_position = span['bbox'][1]
 
                     # Get nombre de categoría
                     if nombre_de_categoria(text_size, text_flags) and not inicio_producto:
@@ -87,29 +91,55 @@ def extraer_informacion(page):
                         fin_producto = True
 
                     elif sku_pattern_2.findall(text):
-                        sku = sku_pattern_2.findall(text)[0].replace(".", "")
-                        skus.append(sku)
-                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                            sku = sku_pattern_2.findall(text)[0].replace(".", "")
+                            skus.append(sku)
+                            sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                            fin_producto = True
+                            inicio_producto = True
+                            subtitulos.append("Producto")
+                            precios.append(f"Pago de contado: SA")
+                    
+                    elif sku_pattern_3.findall(text):
+                        text = text.replace('Sku´s de referencia: ', '')
+                        skus.append(text)
+                        sku = re.findall(r'\d+', text)
+                        for num in sku:
+                            sku_positions.append((num, text_y_position))
                         fin_producto = True
                         inicio_producto = True
                         subtitulos.append("Producto")
-                        precios.append(f"Pago de contado: NA")
+                        precios.append(f"Pago de contado: SA")
 
                     # Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
                         vigencias.append(text)
                         info.append(datos)
-                        datos = ""
+                        datos = ''
                         fin_producto = False
                         inicio_producto = False
 
+                    # Delete info extra
                     elif delete_pattern.findall(text) or delete_pattern2.findall(text) or precio_pattern.findall(text):
                         continue
-
+                    
                     # Get Precio precio_del_producto(text_size, text_flags)
                     elif precio_pattern2.findall(text):
-                        print(text)
                         precios.append(f"Pago de contado: {text}")
+
+                    # Get el cupon
+                    elif bono_pattern.findall(text):
+                        cupones.append(text)
+                        
+                    elif bono_pattern2.findall(text) and len(cupones) > 0:
+                        texto_original = cupones[-1] + " " + text
+                        texto_sin_espacios = re.sub(r'\s(?=[A-Za-z0-9])', '', texto_original)
+                        texto_intermedio = re.sub(r'\s+\$', ' $', texto_sin_espacios)
+                        texto_corregido = re.sub(r'RegaloDe', 'Regalo de', texto_intermedio, flags=re.IGNORECASE)
+                        texto_sin_caracteres_especiales = re.sub(r'[!¡*]', '', texto_corregido).strip()
+                        texto_final = texto_sin_caracteres_especiales.lower()
+                        texto_final = 'Bono' + texto_final[4:]
+
+                        cupones[-1] = texto_final
 
                     # Get Info producto
                     else:
@@ -118,8 +148,6 @@ def extraer_informacion(page):
                         else:
                             datos += " " + text
 
-                    text_buffer = text
-
     return sku_positions  # Devolver las posiciones de los SKUs para asignar imágenes
 
 def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions):
@@ -127,6 +155,7 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
     imagenes = []
 
     for img in images:
+        
         xref = img['xref']
         if xref > 0:
             if img['width'] > 311 and img['height'] > 311:
@@ -148,8 +177,14 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
 
         if closest_sku:
             image_name = f"{closest_sku}.{ext}"
+            sku_positions = [tupla for tupla in sku_positions if tupla[0] != closest_sku]
         else:
-            image_name = f"producto_{count+1}.{ext}"
+            image_name = f"dummy_{count}.{ext}"
+        
+        # if count < len(skus):
+        #     image_name = f"{skus[count]}.{ext}"
+        # else:
+        #     image_name = f"dummy_{count}.{ext}"
 
         # Guardar la imagen localmente en lugar de subirla al bucket
         ruta_imagen = os.path.join('./imagenes', image_name)
@@ -173,6 +208,7 @@ def find_closest_sku(sku_positions, image_y_position):
         if distance < min_distance:
             closest_sku = sku
             min_distance = distance
+            sku_positions = [tupla for tupla in sku_positions if tupla[0] != closest_sku]
 
     return closest_sku
 
@@ -195,33 +231,13 @@ def get_urls(page):
             url = url.replace(":", "-")
             urls_with_rect.append((url, coordenadas))
 
-    # Ordenar URLs por su posición en el eje Y, luego en el eje X
+    # Ordenar los URLs basados en las coordenadas rectangulares (x, y)
     urls_sorted = sorted(urls_with_rect, key=lambda x: (x[1][1], x[1][0]))
 
     # Extraer solo los URLs ya ordenados
-    urls_sorted = [url for url, _ in urls_sorted]
-
-    # Asegurar que las URLs obtenidas de la imagen están disponibles antes de cualquier intento de coincidencia
-    if len(urls) == 0:
-        urls.extend(urls_sorted[:len(skus)])  # Mantener las URLs obtenidas inicialmente en este paso
-
-    # Asignar URLs a los SKUs
-    for i in range(len(skus)):
-        sku = skus[i]
-        matched_url = None
-
-        # Intentar encontrar una coincidencia entre el SKU y las URLs
-        for url in urls_sorted:
-            if sku in url:
-                matched_url = url
-                break
-        
-        # Si no hay coincidencia con el SKU, dejar la URL obtenida al principio (antes de intentar coincidencias)
-        if not matched_url:
-            matched_url = urls[i] 
-        
-        # Actualizar la URL final en la lista de URLs
-        urls[i] = matched_url
+    urls_sor = [url for url, _ in urls_sorted]
+    for url in urls_sor:
+        urls.append(url)
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
@@ -326,11 +342,11 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             precio = precios[i] if i < len(precios) else ""
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {titulos[0]}"
+            cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
 
             if sku:
                 sku_num = "Sku: " + sku
-                data = [sku_num, categoria, subtitulo, content, precio, vigencia]
-                guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
+                data = [sku_num, categoria, subtitulo, cupon, content, precio, vigencia]
 
         # Generar un reporte Excel para cada categoría
         if len(titulos) > 0:
