@@ -7,6 +7,7 @@ import io
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as ExcelImage
+from PIL import Image
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -166,6 +167,7 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
     images_sorted = sorted(imagenes, key=lambda img: img[1][3], reverse=False)
 
     # Asignar imágenes al SKU más cercano basado en las posiciones
+    # Asignar imágenes al SKU más cercano basado en las posiciones
     count = 0
     for xref, bbox in images_sorted:
         base_image = doc.extract_image(xref)
@@ -176,15 +178,9 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         closest_sku = find_closest_sku(sku_positions, bbox[3])
 
         if closest_sku:
-            image_name = f"{closest_sku}.{ext}"
-            sku_positions = [tupla for tupla in sku_positions if tupla[0] != closest_sku]
+            image_name = f"{closest_sku}.jpeg"
         else:
-            image_name = f"dummy_{count}.{ext}"
-        
-        # if count < len(skus):
-        #     image_name = f"{skus[count]}.{ext}"
-        # else:
-        #     image_name = f"dummy_{count}.{ext}"
+            image_name = f"producto_{count+1}.{ext}"
 
         # Guardar la imagen localmente en lugar de subirla al bucket
         ruta_imagen = os.path.join('./imagenes', image_name)
@@ -347,6 +343,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             if sku:
                 sku_num = "Sku: " + sku
                 data = [sku_num, categoria, subtitulo, cupon, content, precio, vigencia]
+                guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
         # Generar un reporte Excel para cada categoría
         if len(titulos) > 0:
