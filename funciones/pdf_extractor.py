@@ -135,6 +135,7 @@ def extraer_imagenes_orden(page, doc, sku_positions):
     imagenes = []
 
     for img in images:
+        
         xref = img['xref']
         if xref > 0:
             if img['width'] > 311 and img['height'] > 311:
@@ -154,11 +155,14 @@ def extraer_imagenes_orden(page, doc, sku_positions):
         # Encontrar el SKU más cercano basado en la posición Y
         closest_sku = find_closest_sku(sku_positions, bbox[3])
 
-        if closest_sku:
-            image_name = f"{closest_sku}.{ext}"
+        # if closest_sku:
+        #     image_name = f"{closest_sku}.{ext}"
+        # else:
+        
+        if count < len(skus):
+            image_name = f"{skus[count]}.{ext}"
         else:
-            image_name = f"producto_{count+1}.{ext}"
-
+            image_name = f"dummy_{count}.{ext}"
         # Guardar la imagen localmente en lugar de subirla al bucket
         ruta_imagen = os.path.join('./imagenes', image_name)
         with open(ruta_imagen, "wb") as f:
