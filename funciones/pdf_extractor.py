@@ -334,8 +334,11 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 subtitulo = ""
 
             if i < len(info):
-                content = f"Pago semanal: {datos_producto}"
+                # Valor predeterminado que se aplicará si no se encuentra 'enganche' ni 'pago inicial'
+                content = f"Pago semanal: NA\nDescuento: {datos_producto}"
+                datos_producto = datos_producto.replace('es la mejor opción para pagar menos', '')
 
+                # Patrón para el formato de pago semanal
                 pago_semanal_pattern = re.compile(r'(\$?\d+)\s*x\s*(\d+)\s*semanas\s*(\$\d{1,3}(?:,\d{3})*)\s*de\s*pago\s*inicial\s*(\d+)(.*)')
 
                 # Buscar y reemplazar el formato de pago semanal
@@ -356,15 +359,20 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                     nuevo_texto = f"${cantidad4} x {semanas} semanas {pago_inicial} de pago inicial"
                     datos_producto = datos_producto.replace(match.group(0), nuevo_texto + texto_adicional)
 
+                    # Si se encuentra el patrón de pago semanal, se actualiza el contenido
+                    content = f"Pago semanal: {datos_producto}"
+
+                # Revisar si 'enganche' aparece en datos_producto
                 if 'enganche' in datos_producto:
                     datos_producto = datos_producto.replace('enganche', 'enganche\nDescuento:')
+                    content = f"Pago semanal: {datos_producto}"
 
+                # Revisar si hay 'pago inicial' en datos_producto
                 elif re.search(r'pago inicial \d+', datos_producto):
                     datos_producto = re.sub(r'(pago inicial \d+)', r'\1\nDescuento:', datos_producto)
+                    content = f"Pago semanal: {datos_producto}"
 
-                else:
-                    content = f"Pago semanal: NA\nDescuento: {datos_producto}"
-
+                # Aplicar otras transformaciones comunes a datos_producto
                 if 'con tu' in datos_producto:
                     datos_producto = datos_producto.replace('con tu', 'con tu prestamos elektra')
 
@@ -374,10 +382,6 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 datos_producto = re.sub(r'Recuerda que el uso de casco.*', '', datos_producto)
                 datos_producto = re.sub(r'Sku´s participantes:.*', '', datos_producto)
                 datos_producto = re.sub(r'Sku´s\s+que no participan:.*', '', datos_producto)
-                datos_producto = datos_producto.replace('es la mejor opción para pagar menos', '')
-
-                # Asignar el contenido final a la variable 'content' después de todo el procesamiento
-                content = f"Pago semanal: {datos_producto}"
 
             else:
                 content = ""
