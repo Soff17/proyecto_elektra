@@ -67,7 +67,6 @@ def extraer_informacion(page):
 
                     # Get nombre de categoría
                     if nombre_de_categoria(text_size, text_flags) and not inicio_producto:
-                        text = text.replace(" ", "_")
                         if not inicio_productos and len(titulos) > 0:
                             titulos[-1] += " " + text
                         else:
@@ -97,7 +96,7 @@ def extraer_informacion(page):
                             fin_producto = True
                             inicio_producto = True
                             subtitulos.append("Producto")
-                            precios.append(f"Pago de contado: SA")
+                            precios.append(f"Pago de contado: NA")
                     
                     elif sku_pattern_3.findall(text):
                         text = text.replace('Sku´s de referencia: ', '')
@@ -108,7 +107,7 @@ def extraer_informacion(page):
                         fin_producto = True
                         inicio_producto = True
                         subtitulos.append("Producto")
-                        precios.append(f"Pago de contado: SA")
+                        precios.append(f"Pago de contado: NA")
 
                     # Get Vigencias
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
@@ -237,6 +236,7 @@ def get_urls(page):
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
+    titulo = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulo).strip()
     titulo = titulo.replace(" ", "_")
     
     # Generar el contenido del archivo como una cadena
@@ -313,31 +313,79 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls), len(precios))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
-            subtitulo = f"Producto: {subtitulos[i]}" if i < len(subtitulos) else ""
-            if i < len(info):
-                datos_producto = info[i]
+            # Extraer el subtítulo (Producto)
+            if i < len(subtitulos):
+                datos_producto = info[i] if i < len(info) else ""
+                
+                # Verificar si el subtítulo no es 'Producto: Producto'
+                if subtitulos[i] != 'Producto':
+                    # Capturar todo lo anterior al primer símbolo de $
+                    match = re.search(r'^(.*?)(\$\d+)', datos_producto)
+                    if match:
+                        # Concatenar el texto antes del $ al subtítulo existente
+                        subtitulo = f"Producto: {subtitulos[i]} {match.group(1).strip()}"
+                        
+                        # Actualizar datos_producto para que contenga lo que sigue después del $
+                        datos_producto = datos_producto.replace(match.group(1), "").strip()
+                    else:
+                        subtitulo = f"Producto: {subtitulos[i]}"
+                else:
+                    subtitulo = "Producto: Producto"
+            else:
+                subtitulo = ""
 
-                # Inicializar el contenido con "Pago semanal" al inicio
+            if i < len(info):
                 content = f"Pago semanal: {datos_producto}"
 
-                # Verificar si existe "enganche" en el texto
-                if 'enganche' in datos_producto:
-                    content = content.replace('enganche', 'enganche\nDescuento:')
-                
-                # Verificar si existe "pago inicial {cantidad}" en el texto
-                elif re.search(r'pago inicial \d+', datos_producto):
-                    # Insertar el salto de línea antes del descuento después del "pago inicial"
-                    content = re.sub(r'(pago inicial \d+)', r'\1\nDescuento:', content)
+                pago_semanal_pattern = re.compile(r'(\$?\d+)\s*x\s*(\d+)\s*semanas\s*(\$\d{1,3}(?:,\d{3})*)\s*de\s*pago\s*inicial\s*(\d+)(.*)')
 
-                # Quitar cualquier texto adicional como "es la mejor opción para pagar menos"
-                content = content.replace('es la mejor opción para pagar menos', '')
+                # Buscar y reemplazar el formato de pago semanal
+                match = pago_semanal_pattern.search(datos_producto)
+                if match:
+                    cantidad1 = match.group(1) 
+                    semanas = match.group(2)
+                    pago_inicial = match.group(3)
+                    cantidad4 = match.group(4)
+                    texto_adicional = match.group(5)
+
+                    # Verificar si el texto adicional contiene "Descuento" para moverlo a una nueva línea
+                    if 'Descuento' in texto_adicional or 'descuento' in texto_adicional:
+                        texto_adicional = texto_adicional.strip()
+                        texto_adicional = f"\nDescuento: {texto_adicional}"
+
+                    # Reemplazar el texto con el nuevo formato, usando cantidad4 para reemplazar cantidad1
+                    nuevo_texto = f"${cantidad4} x {semanas} semanas {pago_inicial} de pago inicial"
+                    datos_producto = datos_producto.replace(match.group(0), nuevo_texto + texto_adicional)
+
+                if 'enganche' in datos_producto:
+                    datos_producto = datos_producto.replace('enganche', 'enganche\nDescuento:')
+
+                elif re.search(r'pago inicial \d+', datos_producto):
+                    datos_producto = re.sub(r'(pago inicial \d+)', r'\1\nDescuento:', datos_producto)
+
+                else:
+                    content = f"Pago semanal: NA\nDescuento: {datos_producto}"
+
+                if 'con tu' in datos_producto:
+                    datos_producto = datos_producto.replace('con tu', 'con tu prestamos elektra')
+
+                if 'Total a pagar con Préstamo Elektra' in datos_producto:
+                    datos_producto = datos_producto.replace('Total a pagar con Préstamo Elektra', '\nTotal a pagar con Préstamo Elektra')
+
+                datos_producto = re.sub(r'Recuerda que el uso de casco.*', '', datos_producto)
+                datos_producto = re.sub(r'Sku´s participantes:.*', '', datos_producto)
+                datos_producto = re.sub(r'Sku´s\s+que no participan:.*', '', datos_producto)
+                datos_producto = datos_producto.replace('es la mejor opción para pagar menos', '')
+
+                # Asignar el contenido final a la variable 'content' después de todo el procesamiento
+                content = f"Pago semanal: {datos_producto}"
 
             else:
                 content = ""
                 
             precio = precios[i] if i < len(precios) else ""
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
-            categoria = f"Categoria: {titulos[0]}"
+            categoria = f"Categoria: {re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip()}" if titulos else ""
             cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
 
             if sku:
@@ -352,7 +400,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         # Partición pdf, se guarda en un buffer en lugar de archivo físico
         doc_pagina = fitz.open()
         doc_pagina.insert_pdf(doc, from_page=page_num, to_page=page_num)
-        nombre_archivo_pdf = f"{titulos[0].replace(' ', '_')}.pdf"
+        nombre_archivo_pdf = f"{re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip().replace(' ', '_')}.pdf"
 
         # Crear un buffer de bytes
         pdf_buffer_output = io.BytesIO()
