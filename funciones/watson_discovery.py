@@ -109,17 +109,17 @@ def subir_archivo_en_paralelo(ruta_archivo, archivo):
     else:
         print(f"Error al subir el archivo: {archivo}")
 
-# Función para procesar todos los archivos en una carpeta
+# Función para procesar todos los archivos en una carpeta y subcarpetas
 def subir_archivos_de_carpeta(carpeta):
-    archivos = os.listdir(carpeta)
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = []
-        for archivo in archivos:
-            ruta_archivo = os.path.join(carpeta, archivo)
-            futures.append(executor.submit(subir_archivo_en_paralelo, ruta_archivo, archivo))
-        
-        for future in concurrent.futures.as_completed(futures):
-            future.result()
+    for ruta_carpeta, subcarpetas, archivos in os.walk(carpeta):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = []
+            for archivo in archivos:
+                ruta_archivo = os.path.join(ruta_carpeta, archivo)
+                futures.append(executor.submit(subir_archivo_en_paralelo, ruta_archivo, archivo))
+            
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
 
 # Función para contar el número total de documentos en una colección
 def contar_documentos():
@@ -207,7 +207,36 @@ def descargar_todos_los_documentos(carpeta_descarga):
 
         offset += page_limit
 
-# Filtrar archivos ocultos o temporales
+# Filtrar archivos ocultos o temporales y contar archivos en subcarpetas
 def contar_archivos_validos(carpeta):
-    archivos_validos = [f for f in os.listdir(carpeta) if not f.startswith('.') and os.path.isfile(os.path.join(carpeta, f))]
+    archivos_validos = []
+    for ruta_carpeta, subcarpetas, archivos in os.walk(carpeta):
+        for archivo in archivos:
+            # Ignorar archivos ocultos o temporales
+            if not archivo.startswith('.') and os.path.isfile(os.path.join(ruta_carpeta, archivo)):
+                archivos_validos.append(os.path.join(ruta_carpeta, archivo))
+
+    print(f"Archivos válidos encontrados: {archivos_validos}")
     return len(archivos_validos), archivos_validos
+
+# Función para añadir un documento con contenido directo a la colección
+def añadir_documento_desde_contenido(contenido, nombre_archivo, tipo_contenido):
+    nombre_archivo_sanitizado = sanitizar_nombre(nombre_archivo)
+
+    try:
+        # Convertir el contenido a bytes para su envío a Watson Discovery
+        contenido_bytes = contenido.encode('utf-8')
+        from io import BytesIO
+        contenido_io = BytesIO(contenido_bytes)
+
+        response = discovery.add_document(
+            project_id=project_id,
+            collection_id=collection_id,
+            file=contenido_io,
+            filename=nombre_archivo_sanitizado, 
+            file_content_type=tipo_contenido
+        ).get_result()
+        return response['document_id']
+    except Exception as e:
+        print(f"Error al subir {nombre_archivo}: {str(e)}")
+        return None
