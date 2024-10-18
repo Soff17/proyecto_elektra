@@ -163,8 +163,7 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
 
     # Ordenamos las imágenes por su posición Y en la página
     images_sorted = sorted(imagenes, key=lambda img: img[1][3], reverse=False)
-
-    # Asignar imágenes al SKU más cercano basado en las posiciones
+    
     # Asignar imágenes al SKU más cercano basado en las posiciones
     count = 0
     for xref, bbox in images_sorted:
