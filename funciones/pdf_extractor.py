@@ -312,54 +312,53 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls), len(precios))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
-            # Extraer el subtítulo (Producto)
-            if i < len(subtitulos):
-                datos_producto = info[i] if i < len(info) else ""
-                
-                # Verificar si el subtítulo no es 'Producto: Producto'
-                if subtitulos[i] != 'Producto':
-                    # Capturar todo lo anterior al primer símbolo de $
-                    match = re.search(r'^(.*?)(\$\d+)', datos_producto)
-                    if match:
-                        # Concatenar el texto antes del $ al subtítulo existente
-                        subtitulo = f"Producto: {subtitulos[i]} {match.group(1).strip()}"
-                        
-                        # Actualizar datos_producto para que contenga lo que sigue después del $
-                        datos_producto = datos_producto.replace(match.group(1), "").strip()
-                    else:
-                        subtitulo = f"Producto: {subtitulos[i]}"
-                else:
-                    subtitulo = "Producto: Producto"
-            else:
-                subtitulo = ""
+            # Extraer el subtítulo (Producto) y el contenido del producto
+            subtitulo = subtitulos[i] if i < len(subtitulos) else ""
+            datos_producto = info[i] if i < len(info) else ""
 
-            if i < len(info):
-                # Valor predeterminado que se aplicará si no se encuentra 'enganche' ni 'pago inicial'
+            # Aplicar las transformaciones comunes independientemente del subtítulo
+            datos_producto = datos_producto.replace('es la mejor opción para pagar menos', '')  # Eliminar esta frase
+            datos_producto = datos_producto.replace('con tu', 'con tu prestamos elektra')
+            datos_producto = datos_producto.replace('Total a pagar con Préstamo Elektra', '\nTotal a pagar con Préstamo Elektra')
+            
+            # Eliminar frases no deseadas
+            datos_producto = re.sub(r'Recuerda que el uso de casco.*', '', datos_producto)
+            datos_producto = re.sub(r'Sku´s participantes:.*', '', datos_producto)
+            datos_producto = re.sub(r'Sku´s\s+que no participan:.*', '', datos_producto)
+
+            # Verificar si el subtítulo es 'Producto'
+            if subtitulo == 'Producto':
+                subtitulo = "Producto: Producto"
                 content = f"Pago semanal: NA\nDescuento: {datos_producto}"
-                datos_producto = datos_producto.replace('es la mejor opción para pagar menos', '')
+            else:
+                # Si no es 'Producto', aplicar las transformaciones habituales
+                match = re.search(r'^(.*?)(\$\d+)', datos_producto)
+                if match:
+                    subtitulo = f"Producto: {subtitulo} {match.group(1).strip()}"
+                    datos_producto = datos_producto.replace(match.group(1), "").strip()
+                else:
+                    subtitulo = f"Producto: {subtitulo}"
+                
+                # Asignar valor predeterminado
+                content = f"Pago semanal: NA\nDescuento: {datos_producto}"
 
                 # Patrón para el formato de pago semanal
                 pago_semanal_pattern = re.compile(r'(\$?\d+)\s*x\s*(\d+)\s*semanas\s*(\$\d{1,3}(?:,\d{3})*)\s*de\s*pago\s*inicial\s*(\d+)(.*)')
-
+            
                 # Buscar y reemplazar el formato de pago semanal
                 match = pago_semanal_pattern.search(datos_producto)
                 if match:
-                    cantidad1 = match.group(1) 
+                    cantidad4 = match.group(4)  # Se usa cantidad4 en lugar de cantidad1
                     semanas = match.group(2)
                     pago_inicial = match.group(3)
-                    cantidad4 = match.group(4)
-                    texto_adicional = match.group(5)
+                    texto_adicional = match.group(5).strip()
 
-                    # Verificar si el texto adicional contiene "Descuento" para moverlo a una nueva línea
+                    # Verificar si el texto adicional contiene "Descuento"
                     if 'Descuento' in texto_adicional or 'descuento' in texto_adicional:
-                        texto_adicional = texto_adicional.strip()
                         texto_adicional = f"\nDescuento: {texto_adicional}"
 
-                    # Reemplazar el texto con el nuevo formato, usando cantidad4 para reemplazar cantidad1
                     nuevo_texto = f"${cantidad4} x {semanas} semanas {pago_inicial} de pago inicial"
                     datos_producto = datos_producto.replace(match.group(0), nuevo_texto + texto_adicional)
-
-                    # Si se encuentra el patrón de pago semanal, se actualiza el contenido
                     content = f"Pago semanal: {datos_producto}"
 
                 # Revisar si 'enganche' aparece en datos_producto
@@ -371,20 +370,6 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 elif re.search(r'pago inicial \d+', datos_producto):
                     datos_producto = re.sub(r'(pago inicial \d+)', r'\1\nDescuento:', datos_producto)
                     content = f"Pago semanal: {datos_producto}"
-
-                # Aplicar otras transformaciones comunes a datos_producto
-                if 'con tu' in datos_producto:
-                    datos_producto = datos_producto.replace('con tu', 'con tu prestamos elektra')
-
-                if 'Total a pagar con Préstamo Elektra' in datos_producto:
-                    datos_producto = datos_producto.replace('Total a pagar con Préstamo Elektra', '\nTotal a pagar con Préstamo Elektra')
-
-                datos_producto = re.sub(r'Recuerda que el uso de casco.*', '', datos_producto)
-                datos_producto = re.sub(r'Sku´s participantes:.*', '', datos_producto)
-                datos_producto = re.sub(r'Sku´s\s+que no participan:.*', '', datos_producto)
-
-            else:
-                content = ""
                 
             precio = precios[i] if i < len(precios) else ""
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
