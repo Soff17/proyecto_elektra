@@ -157,7 +157,7 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         
         xref = img['xref']
         if xref > 0:
-            if img['width'] > 311 and img['height'] > 311:
+            if img['width'] > 269.5 and img['height'] > 269.5:
                 bbox_img = img['bbox']
                 imagenes.append((xref, bbox_img))
 
@@ -176,19 +176,18 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
 
         if closest_sku:
             image_name = f"{closest_sku}.jpeg"
-        else:
-            image_name = f"producto_{count+1}.{ext}"
 
-        # Guardar la imagen localmente en lugar de subirla al bucket
-        ruta_imagen = os.path.join('./imagenes', image_name)
-        with open(ruta_imagen, "wb") as f:
-            f.write(image_bytes)
+            # Guardar la imagen localmente en lugar de subirla al bucket
+            ruta_imagen = os.path.join('./imagenes', image_name)
+            with open(ruta_imagen, "wb") as f:
+                f.write(image_bytes)
+            print(f"Imagen {image_name} subida exitosamente al bucket.")
 
         # Subir la imagen directamente desde el buffer al bucket
         image_buffer = io.BytesIO(image_bytes)
         # st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
 
-        print(f"Imagen {image_name} subida exitosamente al bucket.")
+        
         count += 1
 
 def find_closest_sku(sku_positions, image_y_position):
@@ -388,7 +387,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 
             precio = precios[i] if i < len(precios) else ""
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
-            categoria = f"Categoria: {re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip()}" if titulos else ""
+            categoria = "Categoría: " + (re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúñÑ\s]', '', titulos[0]).strip() if titulos else '')
             cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
 
             if sku:
@@ -503,4 +502,3 @@ def generar_reporte_excel(titulo_categoria):
     workbook.save(nombre_archivo_excel)
 
     print(f'Reporte generado y guardado en: {nombre_archivo_excel}')
-
