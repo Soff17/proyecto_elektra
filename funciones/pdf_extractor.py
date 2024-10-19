@@ -56,6 +56,9 @@ def extraer_informacion(page):
     datos = ''
     sku_positions = []
 
+    # Nuevo patrón para capturar precios precedidos por "Contado"
+    precio_pattern3 = re.compile(r'Contado\s*\$\d{1,3}(,\d{3})*(\.\d{2})?')
+
     for block in blocks:
         if 'lines' in block:
             for line in block['lines']:
@@ -90,14 +93,14 @@ def extraer_informacion(page):
                         fin_producto = True
 
                     elif sku_pattern_2.findall(text):
-                            sku = sku_pattern_2.findall(text)[0].replace(".", "")
-                            skus.append(sku)
-                            sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
-                            fin_producto = True
-                            inicio_producto = True
-                            subtitulos.append("Producto")
-                            precios.append(f"Pago de contado: NA")
-                    
+                        sku = sku_pattern_2.findall(text)[0].replace(".", "")
+                        skus.append(sku)
+                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                        fin_producto = True
+                        inicio_producto = True
+                        subtitulos.append("Producto")
+                        precios.append(f"Pago de contado: NA")
+
                     elif sku_pattern_3.findall(text):
                         text = text.replace('Sku´s de referencia: ', '')
                         skus.append(text)
@@ -118,17 +121,18 @@ def extraer_informacion(page):
                         inicio_producto = False
 
                     # Delete info extra
-                    elif delete_pattern.findall(text) or delete_pattern2.findall(text) or precio_pattern.findall(text):
+                    elif delete_pattern.findall(text) or delete_pattern2.findall(text):
                         continue
                     
                     # Get Precio precio_del_producto(text_size, text_flags)
-                    elif precio_pattern2.findall(text):
-                        precios.append(f"Pago de contado: {text}")
+                    elif precio_pattern3.findall(text):
+                        precio = precio_pattern3.findall(text)[0]  # Capturar el precio completo
+                        precios.append(f"Pago de contado: {precio}")
 
                     # Get el cupon
                     elif bono_pattern.findall(text):
                         cupones.append(text)
-                        
+
                     elif bono_pattern2.findall(text) and len(cupones) > 0:
                         texto_original = cupones[-1] + " " + text
                         texto_sin_espacios = re.sub(r'\s(?=[A-Za-z0-9])', '', texto_original)
@@ -157,7 +161,7 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         
         xref = img['xref']
         if xref > 0:
-            if img['width'] > 311 and img['height'] > 311:
+            if img['width'] > 269.5 and img['height'] > 269.5:
                 bbox_img = img['bbox']
                 imagenes.append((xref, bbox_img))
 
@@ -318,18 +322,19 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
 
             # Aplicar las transformaciones comunes independientemente del subtítulo
             datos_producto = datos_producto.replace('es la mejor opción para pagar menos', '')  # Eliminar esta frase
-            datos_producto = datos_producto.replace('con tu', 'con tu prestamos elektra')
+            datos_producto = datos_producto.replace('con tu', 'con tu préstamos Elektra')
             datos_producto = datos_producto.replace('Total a pagar con Préstamo Elektra', '\nTotal a pagar con Préstamo Elektra')
-            
+
             # Eliminar frases no deseadas
             datos_producto = re.sub(r'Recuerda que el uso de casco.*', '', datos_producto)
             datos_producto = re.sub(r'Sku´s participantes:.*', '', datos_producto)
             datos_producto = re.sub(r'Sku´s\s+que no participan:.*', '', datos_producto)
-
+            datos_producto = datos_producto.replace('Precio total a pagar a crédito:', '\nPrecio total a pagar a crédito:')
+            
             # Verificar si el subtítulo es 'Producto'
             if subtitulo == 'Producto':
                 subtitulo = "Producto: Producto"
-                content = f"Pago semanal: NA\nDescuento: {datos_producto}"
+                content = f"Pago semanal: NA\nDescuento: {datos_producto}\nPago de contado: NA"
             else:
                 # Si no es 'Producto', aplicar las transformaciones habituales
                 match = re.search(r'^(.*?)(\d+ ?\$|\$\d+)', datos_producto)
@@ -339,8 +344,16 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 else:
                     subtitulo = f"Producto: {subtitulo}"
                 
-                # Asignar valor predeterminado
-                content = f"Pago semanal: NA\nDescuento: {datos_producto}"
+                # Revisar y ajustar las frases que preceden "abono semanal", "descuento" o "descuento en abono semanal"
+                if 'descuento en abono semanal' in datos_producto:
+                    datos_producto = datos_producto.replace('descuento en abono semanal', 'descuento en abono semanal')
+                elif 'Descuento' in datos_producto or 'descuento' in datos_producto:
+                    datos_producto = datos_producto.replace('descuento', 'descuento\nPago de contado:')
+                if 'abono semanal' in datos_producto or 'Abono semanal' in datos_producto:
+                    datos_producto = datos_producto.replace('abono semanal', 'abono semanal\nPago de contado:')
+
+                # Asignar el contenido modificado
+                content = f"{datos_producto}"
 
                 # Patrón para el formato de pago semanal
                 pago_semanal_pattern = re.compile(r'(\$?\d+)\s*x\s*(\d+)\s*semanas\s*(\$\d{1,3}(?:,\d{3})*)\s*de\s*pago\s*inicial\s*(\d+)(.*)')
@@ -370,15 +383,15 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 elif re.search(r'pago inicial \d+', datos_producto):
                     datos_producto = re.sub(r'(pago inicial \d+)', r'\1\nDescuento:', datos_producto)
                     content = f"Pago semanal: {datos_producto}"
-                
-            precio = precios[i] if i < len(precios) else ""
+            
+            # Restante de las asignaciones
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip()}" if titulos else ""
             cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
 
             if sku:
                 sku_num = "Sku: " + sku
-                data = [sku_num, categoria, subtitulo, cupon, content, precio, vigencia]
+                data = [sku_num, categoria, subtitulo, cupon, content, vigencia]
                 guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
         # Generar un reporte Excel para cada categoría
