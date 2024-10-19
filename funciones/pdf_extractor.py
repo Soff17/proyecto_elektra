@@ -332,7 +332,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 content = f"Pago semanal: NA\nDescuento: {datos_producto}"
             else:
                 # Si no es 'Producto', aplicar las transformaciones habituales
-                match = re.search(r'^(.*?)(\$\d+)', datos_producto)
+                match = re.search(r'^(.*?)(\d+ ?\$|\$\d+)', datos_producto)
                 if match:
                     subtitulo = f"Producto: {subtitulo} {match.group(1).strip()}"
                     datos_producto = datos_producto.replace(match.group(1), "").strip()
