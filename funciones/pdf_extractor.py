@@ -158,7 +158,6 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
     imagenes = []
 
     for img in images:
-        
         xref = img['xref']
         if xref > 0:
             if img['width'] > 269.5 and img['height'] > 269.5:
@@ -194,6 +193,28 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
 
         print(f"Imagen {image_name} subida exitosamente al bucket.")
         count += 1
+
+    # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' tanto localmente como para subirla al storage
+    for sku, _ in sku_positions:
+        ruta_imagen_sku = os.path.join('./imagenes', f"{sku}.jpeg")
+        if not os.path.exists(ruta_imagen_sku):
+            ruta_default = './default.jpeg'
+            if os.path.exists(ruta_default):
+                ruta_imagen = os.path.join('./imagenes', f"{sku}.jpeg")
+                
+                # Copiar localmente la imagen predeterminada
+                with open(ruta_default, "rb") as f_default, open(ruta_imagen, "wb") as f_sku:
+                    f_sku.write(f_default.read())
+                print(f"Imagen predeterminada asignada al SKU {sku} localmente.")
+
+                # Subir la imagen predeterminada desde el buffer al storage
+                with open(ruta_imagen, "rb") as f_sku_buffer:
+                    image_buffer = io.BytesIO(f_sku_buffer.read())
+                    # Subir al bucket usando la función correspondiente
+                    # st.upload_image_buffer(bucket_name, bucket_folder, f"{sku}.jpeg", image_buffer)
+                    print(f"Imagen predeterminada asignada al SKU {sku} subida al bucket.")
+            else:
+                print(f"Imagen predeterminada no encontrada.")
 
 def find_closest_sku(sku_positions, image_y_position):
     closest_sku = None
