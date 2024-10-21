@@ -8,7 +8,7 @@ def initialize_storage_client():
     if not json_path:
         raise ValueError("La ruta del archivo JSON no está definida en el archivo .env")
     
-    client = storage.Client.from_service_account_json(json_path)
+    client = storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra_2/quotes-381505-09ca05ec8b5e.json')
     return client
 
 # Función para vaciar la carpeta de imagenes_subidas en lugar de todo el bucket
@@ -126,3 +126,38 @@ def upload_image_buffer(bucket_name, folder_name, image_name, image_buffer):
     blob = bucket.blob(f'{folder_name}/{image_name}')
     blob.upload_from_file(image_buffer, content_type='image/jpeg')  # Ajustar el tipo MIME si es PNG o GIF
     print(f"La imagen {image_name} fue subida exitosamente al bucket {bucket_name}/{folder_name}.")
+
+def check_image_in_bucket(bucket_name, folder_name, image_name):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    
+    # Crear el nombre completo del blob (ruta en el bucket)
+    blob_name = f"{folder_name}/{image_name}"
+    
+    # Verificar si el blob existe en el bucket
+    blob = bucket.blob(blob_name)
+    if blob.exists():
+        print(f"La imagen {image_name} ya existe en el bucket {bucket_name}/{folder_name}.")
+        return True
+    else:
+        print(f"La imagen {image_name} no se encontró en el bucket {bucket_name}/{folder_name}.")
+        return False
+
+def get_default_image_buffer(bucket_name, default_image_name):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    
+    # Crear el nombre completo del blob (ruta en el bucket)
+    blob = bucket.blob(default_image_name)
+    
+    # Verificar si el blob existe antes de intentar descargarlo
+    if blob.exists():
+        # Descargar el contenido del blob en un buffer
+        image_buffer = io.BytesIO()
+        blob.download_to_file(image_buffer)
+        image_buffer.seek(0)  # Reiniciar el puntero del buffer al inicio
+        print(f"Imagen predeterminada '{default_image_name}' descargada exitosamente.")
+        return image_buffer
+    else:
+        print(f"Imagen predeterminada '{default_image_name}' no se encontró en el bucket '{bucket_name}'.")
+        return None

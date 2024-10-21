@@ -7,6 +7,8 @@ import io
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as ExcelImage
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -182,39 +184,74 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         else:
             image_name = f"producto_{count+1}.{ext}"
 
-        # Guardar la imagen localmente en lugar de subirla al bucket
-        ruta_imagen = os.path.join('./imagenes', image_name)
+        # Obtener la carpeta de descargas del usuario
+        downloads_folder = get_downloads_folder()
+
+        # Crear el directorio 'imagenes' dentro de la carpeta Descargas si no existe
+        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
+        if not os.path.exists(ruta_imagenes):
+            os.makedirs(ruta_imagenes)
+
+        # Guardar la imagen en la nueva carpeta de Descargas
+        ruta_imagen = os.path.join(ruta_imagenes, image_name)
         with open(ruta_imagen, "wb") as f:
             f.write(image_bytes)
-
+            
         # Subir la imagen directamente desde el buffer al bucket
         image_buffer = io.BytesIO(image_bytes)
-        # st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
+        #st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
 
         print(f"Imagen {image_name} subida exitosamente al bucket.")
         count += 1
 
-    # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' tanto localmente como para subirla al storage
+    # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' desde Descargas/imagenes
     for sku, _ in sku_positions:
-        ruta_imagen_sku = os.path.join('./imagenes', f"{sku}.jpeg")
+        ruta_imagen_sku = os.path.join(ruta_imagenes, f"{sku}.jpeg")
         if not os.path.exists(ruta_imagen_sku):
             ruta_default = './default.jpeg'
             if os.path.exists(ruta_default):
-                ruta_imagen = os.path.join('./imagenes', f"{sku}.jpeg")
+                ruta_imagen = os.path.join(ruta_imagenes, f"{sku}.jpeg")
                 
                 # Copiar localmente la imagen predeterminada
                 with open(ruta_default, "rb") as f_default, open(ruta_imagen, "wb") as f_sku:
                     f_sku.write(f_default.read())
                 print(f"Imagen predeterminada asignada al SKU {sku} localmente.")
 
-                # Subir la imagen predeterminada desde el buffer al storage
-                with open(ruta_imagen, "rb") as f_sku_buffer:
-                    image_buffer = io.BytesIO(f_sku_buffer.read())
-                    # Subir al bucket usando la función correspondiente
-                    # st.upload_image_buffer(bucket_name, bucket_folder, f"{sku}.jpeg", image_buffer)
-                    print(f"Imagen predeterminada asignada al SKU {sku} subida al bucket.")
             else:
                 print(f"Imagen predeterminada no encontrada.")
+    ''''
+    # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' desde el bucket
+    for sku, _ in sku_positions:
+        # Verificar si la imagen del SKU ya fue subida
+        image_exists = st.check_image_in_bucket(bucket_name, bucket_folder, f"{sku}.jpeg")
+        if not image_exists:
+            # Subir 'default.jpeg' desde el almacenamiento predeterminado
+            ruta_default = './default.jpeg'
+            default_image_buffer = get_default_image_buffer_from_local("./default.jpeg")
+            if default_image_buffer:
+                #st.upload_image_buffer(bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
+                print(f"Imagen predeterminada asignada al SKU {sku} subida al bucket.")
+                ruta_imagen = os.path.join(ruta_imagenes, f"{sku}.jpeg")
+                # Copiar localmente la imagen predeterminada
+                with open(ruta_default, "rb") as f_default, open(ruta_imagen, "wb") as f_sku:
+                    f_sku.write(f_default.read())
+                print(f"Imagen predeterminada asignada al SKU {sku} localmente.")
+            else:
+                print(f"Imagen predeterminada no encontrada.")
+    '''
+    
+def get_default_image_buffer_from_local(default_image_path="./default.jpeg"):
+    try:
+        # Abrir la imagen en modo binario
+        with open(default_image_path, "rb") as default_image_file:
+            # Cargar la imagen en un buffer
+            image_buffer = io.BytesIO(default_image_file.read())
+            image_buffer.seek(0)  # Reiniciar el puntero del buffer al inicio
+            print(f"Imagen predeterminada '{default_image_path}' cargada exitosamente desde la raíz del proyecto.")
+            return image_buffer
+    except FileNotFoundError:
+        print(f"Imagen predeterminada '{default_image_path}' no encontrada en la raíz del proyecto.")
+        return None
 
 def find_closest_sku(sku_positions, image_y_position):
     closest_sku = None
@@ -273,18 +310,22 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
     # wd.añadir_documento_desde_contenido(contenido_txt, f"{titulo} {name_file}.txt", 'text/plain')
     print(f'se está subiendo "{titulo} {name_file}.txt"')
 
-     # Crear el directorio si no existe
-    if not os.path.exists('./output_files'):
-        os.makedirs('./output_files')
+    # Obtener la carpeta de descargas del usuario
+    downloads_folder = get_downloads_folder()
+
+    # Crear el directorio 'output_files' dentro de la carpeta Descargas si no existe
+    ruta_output_files = os.path.join(downloads_folder, 'output_files')
+    if not os.path.exists(ruta_output_files):
+        os.makedirs(ruta_output_files)
 
     # Definir la ruta completa del archivo
-    file_path = os.path.join('./output_files', f"{titulo} {name_file}.txt")
+    file_path = os.path.join(ruta_output_files, f"{titulo} {name_file}.txt")
 
     # Guardar el contenido en un archivo local
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(contenido_txt)
 
-    print(f'Archivo guardado localmente: "{file_path}"')
+    print(f'Archivo guardado localmente en: "{file_path}"')
         
 def particion_pdf(pdf_path, output_archivos):
     doc = fitz.open(pdf_path)
@@ -343,7 +384,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
 
             # Aplicar las transformaciones comunes independientemente del subtítulo
             datos_producto = datos_producto.replace('es la mejor opción para pagar menos', '')  # Eliminar esta frase
-            datos_producto = datos_producto.replace('con tu', 'con tu préstamos Elektra')
+            datos_producto = datos_producto.replace('con tu', 'con tu préstamo Elektra')
             datos_producto = datos_producto.replace('Total a pagar con Préstamo Elektra', '\nTotal a pagar con Préstamo Elektra')
 
             # Eliminar frases no deseadas
@@ -429,12 +470,16 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         doc_pagina.save(pdf_buffer_output)
         pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
 
-        # Guardar el PDF localmente antes de subirlo al bucket
-        ruta_local_pdf = os.path.join('./pdfs_locales', nombre_archivo_pdf)
-        if not os.path.exists('./pdfs_locales'):
-            os.makedirs('./pdfs_locales')
+        # Crear el directorio 'pdf_nuevos' dentro de Descargas si no existe
+        downloads_folder = get_downloads_folder()
+        ruta_pdf_nuevos = os.path.join(downloads_folder, 'pdf_nuevos')
+        if not os.path.exists(ruta_pdf_nuevos):
+            os.makedirs(ruta_pdf_nuevos)
+
+        # Guardar el PDF en la nueva carpeta
+        ruta_local_pdf = os.path.join(ruta_pdf_nuevos, nombre_archivo_pdf)
         with open(ruta_local_pdf, 'wb') as f:
-            f.write(pdf_buffer_output.getvalue())
+            f.write(pdf_buffer.getvalue())
 
         print(f"PDF {nombre_archivo_pdf} guardado localmente en: {ruta_local_pdf}")
 
@@ -444,6 +489,13 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
         doc_pagina.close()
+
+def get_downloads_folder():
+    # Obtener la carpeta de descargas según el sistema operativo
+    if os.name == 'nt':  # Windows
+        return str(Path.home() / 'Downloads')
+    else:  # macOS y Linux
+        return str(Path.home() / 'Downloads')
 
 def generar_reporte_excel(titulo_categoria):
     # Ajustar las longitudes de las listas antes de generar el reporte
@@ -464,15 +516,25 @@ def generar_reporte_excel(titulo_categoria):
     # Añadir una columna que indique si el SKU tiene una imagen asociada
     def tiene_imagen(sku):
         extensiones_imagen = ['jpeg']
+
+        # Obtener la carpeta de descargas del usuario
+        downloads_folder = get_downloads_folder()
+
+        # Ruta de la carpeta 'imagenes' en Descargas
+        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
+
         for ext in extensiones_imagen:
-            if os.path.exists(f"./imagenes/{sku}.{ext}"):
+            if os.path.exists(f"{ruta_imagenes}/{sku}.{ext}"):
                 return True
         return False
 
     df['Tiene Imagen'] = df['SKU'].apply(tiene_imagen)
 
-    # Crear un nombre de archivo único para cada categoría
-    nombre_archivo_excel = f"./reportes/reporte_{titulo_categoria.replace(' ', '_')}.xlsx"
+    # Obtener la carpeta de descargas del usuario
+    downloads_folder = get_downloads_folder()
+
+    # Crear un nombre de archivo único para cada categoría y guardarlo en la carpeta de descargas
+    nombre_archivo_excel = os.path.join(downloads_folder, f"reporte_{titulo_categoria.replace(' ', '_')}.xlsx")
 
     # Guardar el DataFrame como archivo Excel sin imágenes aún
     df.to_excel(nombre_archivo_excel, index=False)
@@ -499,8 +561,12 @@ def generar_reporte_excel(titulo_categoria):
     for index, sku in enumerate(skus, start=2):
         imagen_path = None
         extensiones_imagen = ['jpeg']
+
+        # Ruta de la carpeta 'imagenes' en Descargas
+        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
+
         for ext in extensiones_imagen:
-            imagen_path = f"./imagenes/{sku}.{ext}"
+            imagen_path = f"{ruta_imagenes}/{sku}.{ext}"
             if os.path.exists(imagen_path):
                 break
 
@@ -522,4 +588,3 @@ def generar_reporte_excel(titulo_categoria):
     workbook.save(nombre_archivo_excel)
 
     print(f'Reporte generado y guardado en: {nombre_archivo_excel}')
-
