@@ -3,6 +3,7 @@ import re
 import os
 from funciones import watson_discovery as wd
 from funciones import image_storage as st
+from funciones import elastict_search as es
 import io
 import pandas as pd
 from openpyxl import load_workbook
@@ -225,13 +226,13 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
     # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' desde el bucket
     for sku, _ in sku_positions:
         # Verificar si la imagen del SKU ya fue subida
-        image_exists = st.check_image_in_bucket(bucket_name, bucket_folder, f"{sku}.jpeg")
+        #image_exists = st.check_image_in_bucket(bucket_name, bucket_folder, f"{sku}.jpeg")
         if not image_exists:
             # Subir 'default.jpeg' desde el almacenamiento predeterminado
             ruta_default = './default.jpeg'
             default_image_buffer = get_default_image_buffer_from_local("./default.jpeg")
             if default_image_buffer:
-                #st.upload_image_buffer(bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
+                # st.upload_image_buffer(bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
                 print(f"Imagen predeterminada asignada al SKU {sku} subida al bucket.")
                 ruta_imagen = os.path.join(ruta_imagenes, f"{sku}.jpeg")
                 # Copiar localmente la imagen predeterminada
@@ -241,7 +242,6 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
             else:
                 print(f"Imagen predeterminada no encontrada.")
     '''
-    
 def get_default_image_buffer_from_local(default_image_path="./default.jpeg"):
     try:
         # Abrir la imagen en modo binario
@@ -296,6 +296,39 @@ def get_urls(page):
     urls_sor = [url for url, _ in urls_sorted]
     for url in urls_sor:
         urls.append(url)
+def guardar_informacion_a_elasticsearch(titulo, name_file, data):
+    # Reemplazar espacios con guiones bajos
+    titulo = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulo).strip()
+    titulo = titulo.replace(" ", "_")
+    
+    # Generar el contenido del archivo como una cadena
+    contenido_txt = "\n".join(data)
+
+    # Subir directamente a Elasticsearch
+    documento = {
+        "titulo": f"{titulo} {name_file}",
+        "contenido": contenido_txt
+    }
+    
+    # Subir el documento a Elasticsearch
+    #es.indexar_documento("catalogo", f"{titulo}_{name_file}", documento) 
+    print(f'Se está subiendo "{titulo} {name_file}.txt" a Elasticsearch.')
+
+    # Guardar el archivo localmente
+    downloads_folder = get_downloads_folder()
+    ruta_output_files = os.path.join(downloads_folder, 'output_files')
+    
+    if not os.path.exists(ruta_output_files):
+        os.makedirs(ruta_output_files)
+
+    # Definir la ruta completa del archivo
+    file_path = os.path.join(ruta_output_files, f"{titulo} {name_file}.txt")
+
+    # Guardar el contenido en un archivo local
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write(contenido_txt)
+
+    print(f'Archivo guardado localmente en: "{file_path}"')
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
@@ -460,7 +493,8 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 sku_num = "Sku: " + sku
                 data = [sku_num, categoria, subtitulo, cupon, content, vigencia]
                 nueva_data_productos.append([sku_num, categoria, subtitulo, cupon, content, vigencia])
-                guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
+                #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
+                guardar_informacion_a_elasticsearch(titulos[0], f"{sku} {url}", data)
 
         # Generar un reporte Excel para cada categoría
         if len(titulos) > 0:

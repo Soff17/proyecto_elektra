@@ -3,6 +3,7 @@ from flask_cors import CORS  # Importar CORS
 from funciones import watson_discovery as wd
 from funciones import pdf_extractor as pe
 from funciones import image_storage as st
+from funciones import elastict_search as es
 from funciones.token import verificar_token, generate_token 
 from dotenv import load_dotenv
 import os
@@ -52,16 +53,17 @@ def procesar_y_subir():
 
         # Paso 3: Eliminar documentos
         # wd.eliminar_documentos()
-        
+        #es.eliminar_documentos("catalogo")
+
         pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
 
         # Paso 4: Esperar a que se hayan eliminado todos los documentos para subir los nuevos a discovery
         ''''
         while True:
-            total_documentos = wd.contar_documentos()
+            total_documentos = es.contar_documentos("catalogo")
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                # pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
+                pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
                 print("PDF procesado exitosamente.")
                 break
             else:

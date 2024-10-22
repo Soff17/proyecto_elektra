@@ -63,7 +63,7 @@ def count_images_in_bucket(bucket_name, folder_name):
     # Listar los blobs que están dentro de la carpeta especificada
     blobs = list(bucket.list_blobs(prefix=folder_name))
     
-    # Filtrar solo imágenes por su tipo MIME (esto depende del formato de imágenes que estés utilizando, por ejemplo, PNG o JPG)
+    # Filtrar solo imágenes por su tipo MIME
     image_count = sum(1 for blob in blobs if blob.name.endswith(('.jpeg')))
     
     print(f"La carpeta '{folder_name}' en el bucket '{bucket_name}' contiene {image_count} imágenes.")
@@ -124,7 +124,7 @@ def upload_image_buffer(bucket_name, folder_name, image_name, image_buffer):
     client = initialize_storage_client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(f'{folder_name}/{image_name}')
-    blob.upload_from_file(image_buffer, content_type='image/jpeg')  # Ajustar el tipo MIME si es PNG o GIF
+    blob.upload_from_file(image_buffer, content_type='image/jpeg')
     print(f"La imagen {image_name} fue subida exitosamente al bucket {bucket_name}/{folder_name}.")
 
 def check_image_in_bucket(bucket_name, folder_name, image_name):
@@ -136,12 +136,31 @@ def check_image_in_bucket(bucket_name, folder_name, image_name):
     
     # Verificar si el blob existe en el bucket
     blob = bucket.blob(blob_name)
-    if blob.exists():
-        print(f"La imagen {image_name} ya existe en el bucket {bucket_name}/{folder_name}.")
-        return True
-    else:
-        print(f"La imagen {image_name} no se encontró en el bucket {bucket_name}/{folder_name}.")
-        return False
+    return blob.exists()
+
+def check_images_in_bucket(bucket_name, folder_name, image_names):
+    client = initialize_storage_client()
+    results = {}
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {
+            executor.submit(check_image_in_bucket, client, bucket_name, folder_name, image_name): image_name
+            for image_name in image_names
+        }
+        
+        for future in futures:
+            image_name = futures[future]
+            try:
+                exists = future.result()
+                results[image_name] = exists
+                if exists:
+                    print(f"La imagen {image_name} ya existe en el bucket {bucket_name}/{folder_name}.")
+                else:
+                    print(f"La imagen {image_name} no se encontró en el bucket {bucket_name}/{folder_name}.")
+            except Exception as e:
+                print(f"Error al verificar la imagen {image_name}: {str(e)}")
+    
+    return results
 
 def get_default_image_buffer(bucket_name, default_image_name):
     client = initialize_storage_client()
