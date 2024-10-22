@@ -11,6 +11,7 @@ from openpyxl.drawing.image import Image as ExcelImage
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from openpyxl.styles import PatternFill
+from unidecode import unidecode
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -296,10 +297,11 @@ def get_urls(page):
     urls_sor = [url for url, _ in urls_sorted]
     for url in urls_sor:
         urls.append(url)
+
 def guardar_informacion_a_elasticsearch(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
     titulo = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulo).strip()
-    titulo = titulo.replace(" ", "_")
+    titulo = unidecode(titulo).replace(" ", "_")  # Quitar acentos con unidecode
     
     # Generar el contenido del archivo como una cadena
     contenido_txt = "\n".join(data)
@@ -311,7 +313,7 @@ def guardar_informacion_a_elasticsearch(titulo, name_file, data):
     }
     
     # Subir el documento a Elasticsearch
-    #es.indexar_documento("catalogo", f"{titulo}_{name_file}", documento) 
+    #es.indexar_documento("catalogo", f"{titulo} {name_file}", documento) 
     print(f'Se está subiendo "{titulo} {name_file}.txt" a Elasticsearch.')
 
     # Guardar el archivo localmente
@@ -333,7 +335,7 @@ def guardar_informacion_a_elasticsearch(titulo, name_file, data):
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
     titulo = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulo).strip()
-    titulo = titulo.replace(" ", "_")
+    titulo = unidecode(titulo).replace(" ", "_")  # Quitar acentos con unidecode
     
     # Generar el contenido del archivo como una cadena
     contenido_txt = "\n".join(data)
@@ -503,7 +505,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         # Partición pdf, se guarda en un buffer en lugar de archivo físico
         doc_pagina = fitz.open()
         doc_pagina.insert_pdf(doc, from_page=page_num, to_page=page_num)
-        nombre_archivo_pdf = f"{re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip().replace(' ', '_')}.pdf"
+        nombre_archivo_pdf = f"{unidecode(re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0])).strip().replace(' ', '_')}.pdf"
 
         # Crear un buffer de bytes
         pdf_buffer_output = io.BytesIO()
