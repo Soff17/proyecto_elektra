@@ -9,6 +9,7 @@ from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as ExcelImage
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from openpyxl.styles import PatternFill
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -29,6 +30,7 @@ skus = []
 vigencias = []
 precios = []
 cupones = []
+nueva_data_productos = []
 
 # Definir listas para almacenar la información que vamos a exportar
 data_reporte = {
@@ -340,7 +342,7 @@ def particion_pdf(pdf_path, output_archivos):
 
 def ajustar_longitudes_listas():
     # Encontrar la longitud máxima entre todas las listas
-    max_length = max(len(skus), len(subtitulos), len(info), len(vigencias), len(urls))
+    max_length = max(len(skus), len(subtitulos), len(info), len(vigencias), len(urls), len(nueva_data_productos))
 
     # Rellenar con valores vacíos en caso de que alguna lista sea más corta
     skus.extend([""] * (max_length - len(skus)))
@@ -348,6 +350,9 @@ def ajustar_longitudes_listas():
     info.extend([""] * (max_length - len(info)))
     vigencias.extend([""] * (max_length - len(vigencias)))
     urls.extend([""] * (max_length - len(urls)))
+    
+    # Ajustar también la lista 'nueva_data_productos' para que coincida
+    nueva_data_productos.extend([["", "", "", "", "", ""]] * (max_length - len(nueva_data_productos)))
 
 def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
     # Abre el PDF desde el buffer en memoria
@@ -454,6 +459,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             if sku:
                 sku_num = "Sku: " + sku
                 data = [sku_num, categoria, subtitulo, cupon, content, vigencia]
+                nueva_data_productos.append([sku_num, categoria, subtitulo, cupon, content, vigencia])
                 guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
 
         # Generar un reporte Excel para cada categoría
@@ -501,15 +507,19 @@ def generar_reporte_excel(titulo_categoria):
     # Ajustar las longitudes de las listas antes de generar el reporte
     ajustar_longitudes_listas()
 
+    # Filtrar la nueva data solo para la categoría actual
+    categoria_filtrada = [data for data in nueva_data_productos if data[1] == f"Categoria: {titulo_categoria.strip()}"]
+
+    # Formatear la nueva data con saltos de línea en lugar de comas
+    nueva_data_formateada = ['\n'.join(data) for data in categoria_filtrada]
+
     # Convertir los datos almacenados en un DataFrame de pandas
     df = pd.DataFrame({
-        'SKU': skus,
-        'Subtítulo': subtitulos,
-        'Descripción': info,
-        'Vigencia': vigencias,
-        'URL': urls
+        'SKU': skus[:len(categoria_filtrada)],  # Usa los SKUs correspondientes a la longitud de los datos filtrados
+        'URL': urls[:len(categoria_filtrada)],  
+        'Nueva Data Producto': nueva_data_formateada  # Nueva data con saltos de línea
     })
-
+    
     # Añadir la columna "URL Coincide con SKU"
     df['URL Coincide con SKU'] = df.apply(lambda row: row['SKU'] in row['URL'], axis=1)
 
@@ -548,10 +558,16 @@ def generar_reporte_excel(titulo_categoria):
     col_url_coincide = sheet.max_column - 1
     col_tiene_imagen = sheet.max_column 
 
+
     # Ajustar los anchos de las columnas
     sheet.column_dimensions[sheet.cell(row=1, column=col_sku).column_letter].width = 30 
     sheet.column_dimensions[sheet.cell(row=1, column=col_url_coincide).column_letter].width = 30
     sheet.column_dimensions[sheet.cell(row=1, column=col_tiene_imagen).column_letter].width = 30
+
+    # Ajustar el ancho de la columna de "Nueva Data Producto" para que sea 3 veces más ancho
+    col_nueva_data = 3  # Asumiendo que la columna 3 es la que contiene "Nueva Data Producto"
+    sheet.column_dimensions[sheet.cell(row=1, column=col_nueva_data).column_letter].width = 90  # Triplicar el ancho normal
+
 
     # Añadir imágenes a una nueva columna al final
     col_img = sheet.max_column + 1
@@ -583,6 +599,20 @@ def generar_reporte_excel(titulo_categoria):
 
             img_anchor = sheet.cell(row=fila, column=col_img).coordinate 
             sheet.add_image(img, img_anchor)
+    # Aplicar formato condicional para resaltar en rojo las celdas con "False" en las columnas "URL Coincide con SKU" y "Tiene Imagen"
+    red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+
+    # Columna "URL Coincide con SKU"
+    for row in sheet.iter_rows(min_row=2, min_col=col_url_coincide, max_col=col_url_coincide, max_row=sheet.max_row):
+        for cell in row:
+            if cell.value == False:
+                cell.fill = red_fill
+
+    # Columna "Tiene Imagen"
+    for row in sheet.iter_rows(min_row=2, min_col=col_tiene_imagen, max_col=col_tiene_imagen, max_row=sheet.max_row):
+        for cell in row:
+            if cell.value == False:
+                cell.fill = red_fill
 
     # Guardar el archivo Excel con las imágenes insertadas
     workbook.save(nombre_archivo_excel)

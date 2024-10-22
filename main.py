@@ -48,7 +48,7 @@ def procesar_y_subir():
         # st.empty_bucket_folder(bucket_name, carpeta_pdfs_bucket)
 
         # Paso 2: Eliminar las imágenes de Google Cloud Storage
-        # st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
+        #st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
 
         # Paso 3: Eliminar documentos
         # wd.eliminar_documentos()
