@@ -20,6 +20,19 @@ carpeta_pdfs_bucket = os.getenv('carpeta_pdfs_bucket')
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Endpoint para eliminar documentos por categoría
+@app.route('/eliminar_documentos_categoria', methods=['DELETE'])
+def eliminar_documentos_categoria():
+    try:
+        data = request.get_json()
+        categoria = data.get('categoria', " ") 
+
+        resultado = es.eliminar_documentos_por_categoria(categoria)
+        return jsonify({"mensaje": resultado}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # Endpoint para generar un token dinámico
 @app.route('/generate_token', methods=['GET'])
 def generate_token_endpoint():
