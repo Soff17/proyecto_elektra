@@ -239,7 +239,6 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
                 # Copiar localmente la imagen predeterminada
                 with open(ruta_default, "rb") as f_default, open(ruta_imagen, "wb") as f_sku:
                     f_sku.write(f_default.read())
-                print(f"Imagen predeterminada asignada al SKU {sku} localmente.")
             else:
                 print(f"Imagen predeterminada no encontrada.")
     '''
@@ -330,8 +329,6 @@ def guardar_informacion_a_elasticsearch(titulo, name_file, data):
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(contenido_txt)
 
-    print(f'Archivo guardado localmente en: "{file_path}"')
-
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
     titulo = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulo).strip()
@@ -361,8 +358,6 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
     # Guardar el contenido en un archivo local
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(contenido_txt)
-
-    print(f'Archivo guardado localmente en: "{file_path}"')
         
 def particion_pdf(pdf_path, output_archivos):
     doc = fitz.open(pdf_path)
@@ -523,8 +518,6 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         with open(ruta_local_pdf, 'wb') as f:
             f.write(pdf_buffer.getvalue())
 
-        print(f"PDF {nombre_archivo_pdf} guardado localmente en: {ruta_local_pdf}")
-
         # Subir el PDF directamente desde el buffer al bucket llamando a la función de tu script de storage
         # st.upload_pdf_buffer(bucket_name, carpeta_pdfs_bucket, nombre_archivo_pdf, pdf_buffer_output)
 
@@ -652,5 +645,3 @@ def generar_reporte_excel(titulo_categoria):
 
     # Guardar el archivo Excel con las imágenes insertadas
     workbook.save(nombre_archivo_excel)
-
-    print(f'Reporte generado y guardado en: {nombre_archivo_excel}')
