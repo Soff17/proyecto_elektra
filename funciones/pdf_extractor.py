@@ -109,10 +109,21 @@ def extraer_informacion(page):
 
                     elif sku_pattern_3.findall(text):
                         text = text.replace('Sku´s de referencia: ', '')
-                        skus.append(text)
-                        sku = re.findall(r'\d+', text)
-                        for num in sku:
-                            sku_positions.append((num, text_y_position))
+                        skus_encontrados = re.findall(r'\d+', text)
+
+                        if skus_encontrados:
+                            primer_sku = skus_encontrados[0]
+
+                            # Verificar si el primer SKU ya está en la lista de SKUs
+                            if primer_sku not in skus:
+                                skus.append(primer_sku)
+                                sku_positions.append((primer_sku, text_y_position))  # Registrar posición del primer SKU
+                            elif len(skus_encontrados) > 1:
+                                # Si el primer SKU ya existe, usar el segundo
+                                segundo_sku = skus_encontrados[1]
+                                skus.append(segundo_sku)
+                                sku_positions.append((segundo_sku, text_y_position))  # Registrar posición del segundo SKU
+
                         fin_producto = True
                         inicio_producto = True
                         subtitulos.append("Producto")
@@ -397,7 +408,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         urls.clear()
         skus.clear()
         vigencias.clear()
-        precios.clear()
+        cupones.clear()  # También limpia la lista de cupones si es necesario
 
         # Llamada a extraer_informacion para obtener las posiciones de los SKUs
         sku_positions = extraer_informacion(page)
