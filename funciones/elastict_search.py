@@ -2,6 +2,7 @@ from elasticsearch import Elasticsearch, exceptions
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 from dotenv import load_dotenv
+import concurrent.futures
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -15,6 +16,30 @@ es = Elasticsearch(
     URL_PROJECT,
     api_key=API_KEY_PROJECT
 )
+
+# Función para subir todos los archivos de una carpeta a Elasticsearch
+def subir_archivos_de_carpeta(indice, documentos_dummy):
+    carpeta = documentos_dummy
+
+    def subir_archivo(ruta_archivo, nombre_archivo):
+        try:
+            with open(ruta_archivo, 'rb') as archivo:
+                documento = archivo.read()
+                res = es.index(index=indice, id=nombre_archivo, document={"contenido": documento.decode('utf-8')})
+                return res
+        except Exception as e:
+            print(f"Error al subir {nombre_archivo}: {str(e)}")
+            return None
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = []
+        for ruta_carpeta, _, archivos in os.walk(carpeta):
+            for archivo in archivos:
+                ruta_archivo = os.path.join(ruta_carpeta, archivo)
+                futures.append(executor.submit(subir_archivo, ruta_archivo, archivo))
+
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
 
 # Función para subir un documento a Elasticsearch
 def indexar_documento(indice, id_documento, documento):

@@ -16,10 +16,29 @@ load_dotenv()
 bucket_name = os.getenv('bucket_name')
 carpeta_imagenes_bucket = os.getenv('carpeta_imagenes_bucket')
 carpeta_pdfs_bucket = os.getenv('carpeta_pdfs_bucket')
+documentos_dummy = './imagenes'
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Endpoint para subir archivos de una carpeta al índice
+@app.route('/subir_archivos', methods=['POST'])
+def subir_archivos():
+    try:
+        data = request.get_json()
+        indice = data.get('indice')
+
+        if not indice:
+            return jsonify({"error": "Falta el parámetro 'indice'"}), 400
+
+        # Subir todos los archivos de la carpeta al índice especificado
+        es.subir_archivos_de_carpeta(indice, documentos_dummy)
+
+        return jsonify({"mensaje": f"Archivos subidos correctamente al índice {indice}"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 # Endpoint para eliminar documentos por categoría
 @app.route('/eliminar_documentos_categoria', methods=['DELETE'])
 def eliminar_documentos_categoria():
