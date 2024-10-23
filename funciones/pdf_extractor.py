@@ -15,7 +15,7 @@ from unidecode import unidecode
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
-sku_pattern_3 = re.compile(r'Sku´s de referencia:\s*(\S+)')
+sku_pattern_3 = re.compile(r'Sku[´\'s]{0,4} de referencia:\s*(\S+)|Sku:\s*(\S+)')
 vigencia_pattern = re.compile(r'Vigencia:\s*(.+)')
 delete_pattern = re.compile(r'(Da clic aquí)s?')
 delete_pattern2 = re.compile(r'(¡Cómpralo ya!)s?')
@@ -437,6 +437,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             datos_producto = re.sub(r'Recuerda que el uso de casco.*', '', datos_producto)
             datos_producto = re.sub(r'Sku´s participantes:.*', '', datos_producto)
             datos_producto = re.sub(r'Sku´s\s+que no participan:.*', '', datos_producto)
+            datos_producto = re.sub(r'Modelos seleccionados:.*', '', datos_producto)
             datos_producto = datos_producto.replace('Precio total a pagar a crédito:', '\nPrecio total a pagar a crédito:')
             
             # Verificar si el subtítulo es 'Producto'
