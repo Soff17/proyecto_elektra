@@ -291,13 +291,6 @@ def get_urls(page):
             url = link['uri']
             rect = link['from']
             coordenadas = [rect[0], rect[1], rect[2], rect[3]]
-            # Limpiar el URL según tu lógica actual
-            url = url.replace("https://www.elektra.mx/", "")
-            url = url.replace("/","[")
-            url = url.replace("?", "]")
-            url = url.replace("=", "-")
-            url = url.replace("#", "-")
-            url = url.replace(":", "-")
             urls_with_rect.append((url, coordenadas))
 
     # Ordenar los URLs basados en las coordenadas rectangulares (x, y)
@@ -308,23 +301,19 @@ def get_urls(page):
     for url in urls_sor:
         urls.append(url)
 
-def guardar_informacion_a_elasticsearch(titulo, name_file, data):
-    # Reemplazar espacios con guiones bajos
-    titulo = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulo).strip()
-    titulo = unidecode(titulo).replace(" ", "_")  # Quitar acentos con unidecode
-    
+def guardar_informacion_a_elasticsearch(name_file, data):   
     # Generar el contenido del archivo como una cadena
     contenido_txt = "\n".join(data)
 
     # Subir directamente a Elasticsearch
     documento = {
-        "titulo": f"{titulo} {name_file}",
+        "titulo": f"{name_file}",
         "contenido": contenido_txt
     }
     
     # Subir el documento a Elasticsearch
     #es.indexar_documento("catalogo", f"{titulo} {name_file}", documento) 
-    print(f'Se está subiendo "{titulo} {name_file}.txt" a Elasticsearch.')
+    print(f'Se está subiendo "{name_file}.txt" a Elasticsearch.')
 
     # Guardar el archivo localmente
     downloads_folder = get_downloads_folder()
@@ -334,7 +323,7 @@ def guardar_informacion_a_elasticsearch(titulo, name_file, data):
         os.makedirs(ruta_output_files)
 
     # Definir la ruta completa del archivo
-    file_path = os.path.join(ruta_output_files, f"{titulo} {name_file}.txt")
+    file_path = os.path.join(ruta_output_files, f"{name_file}.txt")
 
     # Guardar el contenido en un archivo local
     with open(file_path, 'w', encoding='utf-8') as file:
@@ -567,10 +556,11 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
 
             if sku:
                 sku_num = "Sku: " + sku
-                data = [sku_num, categoria, subtitulo, cupon, content, vigencia]
+                url_line = f"Url: {url}"
+                data = [sku_num, categoria, subtitulo, cupon, content, vigencia, url_line]
                 nueva_data_productos.append([sku_num, categoria, subtitulo, cupon, content, vigencia])
                 #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
-                guardar_informacion_a_elasticsearch(titulos[0], f"{sku} {url}", data)
+                guardar_informacion_a_elasticsearch(f"{sku}", data)
 
         # Generar un reporte Excel para cada categoría
         if len(titulos) > 0:
