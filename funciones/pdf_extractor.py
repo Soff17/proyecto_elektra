@@ -48,10 +48,12 @@ def nombre_de_categoria(font_size, font_flags):
         return True
     return False
 
-def nombre_del_producto(font_size, font_flags):
-    if (font_size > 31.5 and font_size < 41.0) and (font_flags == 20 or font_flags == 4):
-        return True
-    return False
+def nombre_del_producto(font_size, font_flags, categoria):
+    if categoria == "Planes":
+        return (font_size > 28 and font_size < 35) and (font_flags == 20 or font_flags == 4)
+    else:
+        return (font_size > 31.5 and font_size < 41.0) and (font_flags == 20 or font_flags == 4)
+
 
 def extraer_informacion(page):
     blocks = page.get_text("dict", sort=True)["blocks"]
@@ -64,6 +66,9 @@ def extraer_informacion(page):
 
     # Nuevo patrón para capturar precios precedidos por "Contado"
     precio_pattern3 = re.compile(r'Contado\s*\$\d{1,3}(,\d{3})*(\.\d{2})?')
+
+    # Determinar la categoría antes de procesar el resto de la información
+    categoria = extraer_categoria(page)
 
     for block in blocks:
         if 'lines' in block:
@@ -82,7 +87,8 @@ def extraer_informacion(page):
                             titulos.append(text)
 
                     # Get nombre de producto
-                    elif nombre_del_producto(text_size, text_flags):
+                    # Get nombre de producto usando la nueva condición de la categoría
+                    elif nombre_del_producto(text_size, text_flags, categoria):
                         if inicio_producto:
                             subtitulos[-1] += " " + text
                         else:
@@ -480,9 +486,38 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         for i in range(max(len(subtitulos), len(info), len(skus), len(vigencias), len(urls), len(precios))):
             sku = skus[i] if i < len(skus) else ""
             vigencia = vigencias[i] if i < len(vigencias) else ""
-            # Extraer el subtítulo (Producto) y el contenido del producto
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             datos_producto = info[i] if i < len(info) else ""
+
+            if titulos[0] == "Planes":
+                subtitulo = re.sub(r'^.*?Llévate un', '', subtitulo).strip()
+                subtitulo = re.sub(r'con\s.*', '', subtitulo).strip()
+
+                cupon = "Sin Cupones"
+
+                # Corregir el formato de "95 $ Desde x 128 semanas" a "95 $ x 128 semanas"
+                datos_producto = re.sub(r'(\d+\s*\$)\s*Desde\s*x\s*(\d+\s*semanas)', r'\1 x \2', datos_producto)
+
+                # Corregir el formato de "85 $ $ semanales Desde" a "85 $ semanales" con salto de línea
+                datos_producto = re.sub(r'(\d+\s*\$)\s*\$\s*semanales\s*Desde', r'\1 semanales\n', datos_producto)
+
+                # Corregir el formato de "110 $ semanales Desde" a "110 $ semanales" con salto de línea
+                datos_producto = re.sub(r'(\d+\s*\$)\s*semanales\s*Desde', r'\1 semanales\n', datos_producto)
+
+                if 'Incluye:' in datos_producto:
+                    partes = datos_producto.split('Incluye:', 1)
+                    primera_parte = partes[0].strip()
+                    resto = partes[1].strip() if len(partes) > 1 else ''
+                    datos_producto = f"{primera_parte}\nIncluye: {resto}"
+
+                if 'Incluye:' not in datos_producto:
+                    partes = datos_producto.split('\n', 1)
+                    primera_parte = partes[0]
+                    resto = partes[1] if len(partes) > 1 else ''
+                    resto = resto.replace('Incluye:', '').strip()
+                    datos_producto = f"{primera_parte}\nIncluye: {resto}"
+                
+                vigencia = vigencia.replace('al comprar solo con', '').strip()
 
             # Aplicar las transformaciones comunes independientemente del subtítulo
             datos_producto = datos_producto.replace('es la mejor opción para pagar menos', '')  # Eliminar esta frase
