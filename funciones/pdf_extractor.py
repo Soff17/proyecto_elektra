@@ -507,15 +507,17 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 if 'Incluye:' in datos_producto:
                     partes = datos_producto.split('Incluye:', 1)
                     primera_parte = partes[0].strip()
+                    primera_parte = re.sub(r'^.*?(\d+\s*\$)', r'\1', primera_parte)
                     resto = partes[1].strip() if len(partes) > 1 else ''
-                    datos_producto = f"{primera_parte}\nPago:{primera_parte}\nIncluye: {resto}"
+                    datos_producto = f"Pago: {primera_parte}\nIncluye: {resto}"
 
                 if 'Incluye:' not in datos_producto:
                     partes = datos_producto.split('\n', 1)
                     primera_parte = partes[0]
+                    primera_parte = re.sub(r'^.*?(\d+\s*\$)', r'\1', primera_parte)
                     resto = partes[1] if len(partes) > 1 else ''
                     resto = resto.replace('Incluye:', '').strip()
-                    datos_producto = f"{primera_parte}\nPago:{primera_parte}\nIncluye: {resto}"
+                    datos_producto = f"Pago: {primera_parte}\nIncluye: {resto}"
                 
                 vigencia = vigencia.replace('al comprar solo con', '').strip()
 
@@ -538,9 +540,12 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             else:
                 # Si no es 'Producto', aplicar las transformaciones habituales
                 match = re.search(r'^(.*?)(\d+ ?\$|\$\d+)', datos_producto)
-                if match:
+                if match and titulos[0] != 'Planes':
                     subtitulo = f"Producto: {subtitulo} {match.group(1).strip()}"
                     datos_producto = datos_producto.replace(match.group(1), "").strip()
+                elif titulos[0] == "Planes":
+                    subtitulo = f"Producto: {subtitulo}"
+                    datos_producto = datos_producto
                 else:
                     subtitulo = f"Producto: {subtitulo}"
                 
