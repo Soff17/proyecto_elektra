@@ -50,7 +50,7 @@ def nombre_de_categoria(font_size, font_flags):
 
 def nombre_del_producto(font_size, font_flags, categoria):
     if categoria == "Planes":
-        return (font_size > 28 and font_size < 35) and (font_flags == 20 or font_flags == 4)
+        return (font_size > 28 and font_size < 34) and (font_flags == 20 or font_flags == 4)
     else:
         return (font_size > 31.5 and font_size < 41.0) and (font_flags == 20 or font_flags == 4)
 
@@ -624,9 +624,17 @@ def generar_reporte_excel(titulo_categoria):
         'URL': urls[:len(categoria_filtrada)],  
         'Nueva Data Producto': nueva_data_formateada  # Nueva data con saltos de línea
     })
-    
-    # Añadir la columna "URL Coincide con SKU"
-    df['URL Coincide con SKU'] = df.apply(lambda row: row['SKU'] in row['URL'], axis=1)
+
+    # Asegurarse de que tanto la columna 'SKU' como 'URL' sean de tipo string
+    df['SKU'] = df['SKU'].astype(str).str.strip()
+    df['URL'] = df['URL'].astype(str).str.strip()
+
+    # Crear una nueva columna para verificar si el SKU está contenido en la URL
+    df['URL Coincide con SKU'] = [sku in url for sku, url in zip(df['SKU'], df['URL'])]
+
+
+
+
 
     # Añadir una columna que indique si el SKU tiene una imagen asociada
     def tiene_imagen(sku):
@@ -673,7 +681,6 @@ def generar_reporte_excel(titulo_categoria):
     col_nueva_data = 3  # Asumiendo que la columna 3 es la que contiene "Nueva Data Producto"
     sheet.column_dimensions[sheet.cell(row=1, column=col_nueva_data).column_letter].width = 90  # Triplicar el ancho normal
 
-
     # Añadir imágenes a una nueva columna al final
     col_img = sheet.max_column + 1
     sheet.cell(row=1, column=col_img).value = "Imagen"
@@ -712,6 +719,7 @@ def generar_reporte_excel(titulo_categoria):
         for cell in row:
             if cell.value == False:
                 cell.fill = red_fill
+
 
     # Columna "Tiene Imagen"
     for row in sheet.iter_rows(min_row=2, min_col=col_tiene_imagen, max_col=col_tiene_imagen, max_row=sheet.max_row):
