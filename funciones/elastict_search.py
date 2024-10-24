@@ -2,18 +2,45 @@ from elasticsearch import Elasticsearch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 from dotenv import load_dotenv
+from langchain_elasticsearch import ElasticsearchEmbeddings
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
 
-URL_PROJECT = os.getenv('URL_PROJECT')
-API_KEY_PROJECT = os.getenv('API_KEY_PROJECT')
+URL_PROJECT = os.getenv('https://ee94da5de3504cef84748a8e38dc54dc.us-central1.gcp.cloud.es.io:443')
+API_KEY_PROJECT = os.getenv('VVpDWHVwSUJSQ3ZmQVYyWUd2bFY6SXNiMWRnTXNUcEdycVJQZmNvWlctQQ==')
 
 # Conectar a Elasticsearch con API Key
 es = Elasticsearch(
     URL_PROJECT,
     api_key=API_KEY_PROJECT
 )
+
+def embed_and_index_documents(documents):
+    '''
+    # Crear los metadatos del documento
+    metadata = {
+        'title': title,
+    }
+    
+    return {
+        'text': content,
+        'metadata': metadata
+    }
+
+    Esto es lo que necesita tener el documents para poder ser leido por el embed y ser subido a elasitc
+    '''
+
+    model_id = ".multilingual-e5-small_linux-x86_64"
+    index_name = "langchaintest"
+
+    embeddings = ElasticsearchEmbeddings.from_es_connection(model_id, es)
+    document_embeddings = embeddings.embed_documents(documents['text'])
+
+    for doc, emb in zip([documents], document_embeddings):
+        doc['embedding'] = emb
+        res = es.index(index=index_name, body=doc)
+        print(f"Document indexed: {res}")
 
 # Función para subir un documento a Elasticsearch
 def indexar_documento(indice, id_documento, documento):

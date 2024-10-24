@@ -13,6 +13,9 @@ from concurrent.futures import ThreadPoolExecutor
 from openpyxl.styles import PatternFill
 from unidecode import unidecode
 
+from elasticsearch import Elasticsearch
+from langchain_elasticsearch import ElasticsearchStore, ElasticsearchEmbeddings
+
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
 sku_pattern_3 = re.compile(r'Sku´s de referencia:\s*(\S+)')
