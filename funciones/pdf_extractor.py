@@ -370,16 +370,83 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(contenido_txt)
         
-def particion_pdf(pdf_path, output_archivos):
-    doc = fitz.open(pdf_path)
+def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
+    # Abre el PDF desde el buffer en memoria
+    doc = fitz.open(stream=pdf_buffer, filetype="pdf")
     
+    # Obtener la carpeta de descargas del usuario
+    downloads_folder = get_downloads_folder()
+
+    # Crear la carpeta 'pdfs_finales' dentro de la carpeta Descargas si no existe
+    ruta_pdfs_finales = os.path.join(downloads_folder, 'pdfs_finales')
+    if not os.path.exists(ruta_pdfs_finales):
+        os.makedirs(ruta_pdfs_finales)
+
     for num_page in range(doc.page_count):
+        # Crear un nuevo PDF con solo una página
         doc_pagina = fitz.open()
         doc_pagina.insert_pdf(doc, from_page=num_page, to_page=num_page)
-        nombre_archivo_salida = f"{output_archivos}/pagina_{num_page + 1}.pdf"
-        doc_pagina.save(nombre_archivo_salida)
         
-    doc_pagina.close()
+        # Extraer el nombre de la categoría de la página
+        page = doc.load_page(num_page)
+        categoria = extraer_categoria(page)
+
+        # Sanitizar el nombre de la categoría para ser usado en el nombre de archivo
+        nombre_categoria_sanitizado = sanitizar_nombre_categoria(categoria)
+
+        # Nombre del archivo para la página basado en la categoría
+        nombre_archivo_pdf = f"{nombre_categoria_sanitizado}.pdf"
+        
+        # Guardar localmente en la carpeta 'pdfs_finales'
+        ruta_local_pdf = os.path.join(ruta_pdfs_finales, nombre_archivo_pdf)
+        doc_pagina.save(ruta_local_pdf)
+        print(f"Página {num_page + 1} guardada como {ruta_local_pdf}")
+        
+        # Crear un buffer de bytes para almacenar el PDF en memoria
+        pdf_buffer_output = io.BytesIO()
+        doc_pagina.save(pdf_buffer_output)
+        pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
+
+        # Subir el PDF al bucket directamente desde el buffer
+        # st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
+        print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
+
+        doc_pagina.close()
+
+    doc.close()
+
+def extraer_categoria(page):
+    # Lógica para extraer el nombre de la categoría desde la página
+    blocks = page.get_text("dict", sort=True)["blocks"]
+    
+    for block in blocks:
+        if 'lines' in block:
+            for line in block['lines']:
+                for span in line['spans']:
+                    text = span['text'].strip()
+                    text_size = span['size']
+                    text_flags = span['flags']
+
+                    # Verificar si el texto coincide con el nombre de la categoría
+                    if nombre_de_categoria(text_size, text_flags):
+                        return text
+    return "Categoria_Desconocida"
+
+def sanitizar_nombre_categoria(categoria):
+    # Reemplazar solo los caracteres no válidos, mantener los espacios y convertirlos a guiones bajos
+    categoria_sanitizada = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', categoria).strip()
+    nombre_con_guiones_bajos = unidecode(categoria_sanitizada).replace(" ", "_")
+    
+    # Si hay varios guiones bajos, cortar en el primer guión bajo
+    nombre_final = nombre_con_guiones_bajos.split('_')[0]
+    
+    # Excepciones para nombres específicos
+    if nombre_final == "Home":
+        nombre_final = "Home_Audio"
+    elif nombre_final == "Linea":
+        nombre_final = "Linea_Blanca"
+    
+    return nombre_final
 
 def ajustar_longitudes_listas():
     # Encontrar la longitud máxima entre todas las listas
@@ -508,34 +575,6 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         # Generar un reporte Excel para cada categoría
         if len(titulos) > 0:
             generar_reporte_excel(titulos[0])
-
-        # Partición pdf, se guarda en un buffer en lugar de archivo físico
-        doc_pagina = fitz.open()
-        doc_pagina.insert_pdf(doc, from_page=page_num, to_page=page_num)
-        nombre_archivo_pdf = f"{unidecode(re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0])).strip().replace(' ', '_')}.pdf"
-
-        # Crear un buffer de bytes
-        pdf_buffer_output = io.BytesIO()
-        doc_pagina.save(pdf_buffer_output)
-        pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
-
-        # Crear el directorio 'pdf_nuevos' dentro de Descargas si no existe
-        downloads_folder = get_downloads_folder()
-        ruta_pdf_nuevos = os.path.join(downloads_folder, 'pdf_nuevos')
-        if not os.path.exists(ruta_pdf_nuevos):
-            os.makedirs(ruta_pdf_nuevos)
-
-        # Guardar el PDF en la nueva carpeta
-        ruta_local_pdf = os.path.join(ruta_pdf_nuevos, nombre_archivo_pdf)
-        with open(ruta_local_pdf, 'wb') as f:
-            f.write(pdf_buffer.getvalue())
-
-        # Subir el PDF directamente desde el buffer al bucket llamando a la función de tu script de storage
-        # st.upload_pdf_buffer(bucket_name, carpeta_pdfs_bucket, nombre_archivo_pdf, pdf_buffer_output)
-
-        print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
-
-        doc_pagina.close()
 
 def get_downloads_folder():
     # Obtener la carpeta de descargas según el sistema operativo

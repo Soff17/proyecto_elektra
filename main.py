@@ -88,6 +88,7 @@ def procesar_y_subir():
         #es.eliminar_documentos("catalogo")
 
         pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
+        pe.particion_pdf(pdf_buffer, bucket_name,carpeta_pdfs_bucket)
 
         # Paso 4: Esperar a que se hayan eliminado todos los documentos para subir los nuevos a discovery
         ''''
