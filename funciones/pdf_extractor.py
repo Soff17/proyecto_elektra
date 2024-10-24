@@ -508,14 +508,14 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                     partes = datos_producto.split('Incluye:', 1)
                     primera_parte = partes[0].strip()
                     resto = partes[1].strip() if len(partes) > 1 else ''
-                    datos_producto = f"{primera_parte}\nIncluye: {resto}"
+                    datos_producto = f"{primera_parte}\nPago:{primera_parte}\nIncluye: {resto}"
 
                 if 'Incluye:' not in datos_producto:
                     partes = datos_producto.split('\n', 1)
                     primera_parte = partes[0]
                     resto = partes[1] if len(partes) > 1 else ''
                     resto = resto.replace('Incluye:', '').strip()
-                    datos_producto = f"{primera_parte}\nIncluye: {resto}"
+                    datos_producto = f"{primera_parte}\nPago:{primera_parte}\nIncluye: {resto}"
                 
                 vigencia = vigencia.replace('al comprar solo con', '').strip()
 
