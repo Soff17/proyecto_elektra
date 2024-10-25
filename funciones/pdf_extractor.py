@@ -31,7 +31,7 @@ urls = []
 skus = []
 vigencias = []
 precios = []
-cupones = []
+#cupones = []
 nueva_data_productos = []
 
 # Definir listas para almacenar la información que vamos a exportar
@@ -152,21 +152,22 @@ def extraer_informacion(page):
                         precio = precio_pattern3.findall(text)[0]  # Capturar el precio completo
                         precios.append(f"Pago de contado: {precio}")
 
-                    # Get el cupon
-                    elif bono_pattern.findall(text):
-                        cupones.append(text)
+                        # Get el cupon
+                        '''''
+                        elif bono_pattern.findall(text):
+                            cupones.append(text)
 
-                    elif bono_pattern2.findall(text) and len(cupones) > 0:
-                        texto_original = cupones[-1] + " " + text
-                        texto_sin_espacios = re.sub(r'\s(?=[A-Za-z0-9])', '', texto_original)
-                        texto_intermedio = re.sub(r'\s+\$', ' $', texto_sin_espacios)
-                        texto_corregido = re.sub(r'RegaloDe', 'Regalo de', texto_intermedio, flags=re.IGNORECASE)
-                        texto_sin_caracteres_especiales = re.sub(r'[!¡*]', '', texto_corregido).strip()
-                        texto_final = texto_sin_caracteres_especiales.lower()
-                        texto_final = 'Bono' + texto_final[4:]
+                        elif bono_pattern2.findall(text) and len(cupones) > 0:
+                            texto_original = cupones[-1] + " " + text
+                            texto_sin_espacios = re.sub(r'\s(?=[A-Za-z0-9])', '', texto_original)
+                            texto_intermedio = re.sub(r'\s+\$', ' $', texto_sin_espacios)
+                            texto_corregido = re.sub(r'RegaloDe', 'Regalo de', texto_intermedio, flags=re.IGNORECASE)
+                            texto_sin_caracteres_especiales = re.sub(r'[!¡*]', '', texto_corregido).strip()
+                            texto_final = texto_sin_caracteres_especiales.lower()
+                            texto_final = 'Bono' + texto_final[4:]
 
-                        cupones[-1] = texto_final
-
+                            cupones[-1] = texto_final
+                        '''
                     # Get Info producto
                     else:
                         if datos == '':
@@ -455,7 +456,7 @@ def ajustar_longitudes_listas():
     urls.extend([""] * (max_length - len(urls)))
     
     # Ajustar también la lista 'nueva_data_productos' para que coincida
-    nueva_data_productos.extend([["", "", "", "", "", ""]] * (max_length - len(nueva_data_productos)))
+    nueva_data_productos.extend([["", "", "", "", "", "", ""]] * (max_length - len(nueva_data_productos)))
 
 def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
     # Abre el PDF desde el buffer en memoria
@@ -470,7 +471,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         urls.clear()
         skus.clear()
         vigencias.clear()
-        cupones.clear()  # También limpia la lista de cupones si es necesario
+        #cupones.clear()  # También limpia la lista de cupones si es necesario
 
         # Llamada a extraer_informacion para obtener las posiciones de los SKUs
         sku_positions = extraer_informacion(page)
@@ -493,7 +494,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 subtitulo = re.sub(r'^.*?Llévate un', '', subtitulo).strip()
                 subtitulo = re.sub(r'con\s.*', '', subtitulo).strip()
 
-                cupon = "Sin Cupones"
+                #cupon = "Sin Cupones"
 
                 # Corregir el formato de "95 $ Desde x 128 semanas" a "95 $ x 128 semanas"
                 datos_producto = re.sub(r'(\d+\s*\$)\s*Desde\s*x\s*(\d+\s*semanas)', r'\1 x \2', datos_producto)
@@ -592,19 +593,17 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             # Restante de las asignaciones
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip()}" if titulos else ""
-            cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
+            #cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
 
             if sku:
                 sku_num = "Sku: " + sku
                 url_line = f"Url: {url}"
-                data = [sku_num, categoria, subtitulo, cupon, content, vigencia, url_line]
-                nueva_data_productos.append([sku_num, categoria, subtitulo, cupon, content, vigencia])
+                data = [sku_num, categoria, subtitulo, content, vigencia, url_line]
+                nueva_data_productos.append([sku_num, categoria, subtitulo, content, vigencia, url_line])
                 #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
                 guardar_informacion_a_elasticsearch(f"{sku}", data)
-
-        # Generar un reporte Excel para cada categoría
-        if len(titulos) > 0:
-            generar_reporte_excel(titulos[0])
+                
+    generar_reporte_excel_general()
 
 def get_downloads_folder():
     # Obtener la carpeta de descargas según el sistema operativo
@@ -613,44 +612,31 @@ def get_downloads_folder():
     else:  # macOS y Linux
         return str(Path.home() / 'Downloads')
 
-def generar_reporte_excel(titulo_categoria):
-    # Ajustar las longitudes de las listas antes de generar el reporte
-    ajustar_longitudes_listas()
+def generar_reporte_excel_general():
+    # Extraer SKU y URL directamente desde `nueva_data_productos`
+    skus = [data[0].replace("Sku: ", "") for data in nueva_data_productos]
+    urls = [data[-1].replace("Url: ", "") for data in nueva_data_productos]  # Asume que el último campo es la URL
 
-    # Filtrar la nueva data solo para la categoría actual
-    categoria_filtrada = [data for data in nueva_data_productos if data[1] == f"Categoria: {titulo_categoria.strip()}"]
-
-    # Formatear la nueva data con saltos de línea en lugar de comas
-    nueva_data_formateada = ['\n'.join(data) for data in categoria_filtrada]
-
-    # Convertir los datos almacenados en un DataFrame de pandas
+    # Crear la data en un DataFrame para todas las categorías en `nueva_data_productos`
+    nueva_data_formateada = ['\n'.join(data) for data in nueva_data_productos]
     df = pd.DataFrame({
-        'SKU': skus[:len(categoria_filtrada)],  # Usa los SKUs correspondientes a la longitud de los datos filtrados
-        'URL': urls[:len(categoria_filtrada)],  
-        'Nueva Data Producto': nueva_data_formateada  # Nueva data con saltos de línea
+        'SKU': skus,  
+        'URL': urls,  
+        'Nueva Data Producto': nueva_data_formateada  
     })
 
     # Asegurarse de que tanto la columna 'SKU' como 'URL' sean de tipo string
     df['SKU'] = df['SKU'].astype(str).str.strip()
     df['URL'] = df['URL'].astype(str).str.strip()
 
-    # Crear una nueva columna para verificar si el SKU está contenido en la URL
+    # Crear una columna para verificar si el SKU está contenido en la URL
     df['URL Coincide con SKU'] = [sku in url for sku, url in zip(df['SKU'], df['URL'])]
-
-
-
-
 
     # Añadir una columna que indique si el SKU tiene una imagen asociada
     def tiene_imagen(sku):
         extensiones_imagen = ['jpeg']
-
-        # Obtener la carpeta de descargas del usuario
         downloads_folder = get_downloads_folder()
-
-        # Ruta de la carpeta 'imagenes' en Descargas
         ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
-
         for ext in extensiones_imagen:
             if os.path.exists(f"{ruta_imagenes}/{sku}.{ext}"):
                 return True
@@ -658,11 +644,9 @@ def generar_reporte_excel(titulo_categoria):
 
     df['Tiene Imagen'] = df['SKU'].apply(tiene_imagen)
 
-    # Obtener la carpeta de descargas del usuario
+    # Definir la carpeta de descargas y el nombre del archivo consolidado
     downloads_folder = get_downloads_folder()
-
-    # Crear un nombre de archivo único para cada categoría y guardarlo en la carpeta de descargas
-    nombre_archivo_excel = os.path.join(downloads_folder, f"reporte_{titulo_categoria.replace(' ', '_')}.xlsx")
+    nombre_archivo_excel = os.path.join(downloads_folder, "reporte_consolidado_categorias.xlsx")
 
     # Guardar el DataFrame como archivo Excel sin imágenes aún
     df.to_excel(nombre_archivo_excel, index=False)
@@ -671,31 +655,27 @@ def generar_reporte_excel(titulo_categoria):
     workbook = load_workbook(nombre_archivo_excel)
     sheet = workbook.active
 
-    # Ajustar el ancho de las columnas para "SKU", "URL Coincide con SKU" y "Tiene Imagen"
+    # Ajustar el ancho de las columnas "SKU", "URL Coincide con SKU" y "Tiene Imagen"
     col_sku = 1
     col_url_coincide = sheet.max_column - 1
     col_tiene_imagen = sheet.max_column 
 
-
-    # Ajustar los anchos de las columnas
     sheet.column_dimensions[sheet.cell(row=1, column=col_sku).column_letter].width = 30 
     sheet.column_dimensions[sheet.cell(row=1, column=col_url_coincide).column_letter].width = 30
     sheet.column_dimensions[sheet.cell(row=1, column=col_tiene_imagen).column_letter].width = 30
 
     # Ajustar el ancho de la columna de "Nueva Data Producto" para que sea 3 veces más ancho
-    col_nueva_data = 3  # Asumiendo que la columna 3 es la que contiene "Nueva Data Producto"
-    sheet.column_dimensions[sheet.cell(row=1, column=col_nueva_data).column_letter].width = 90  # Triplicar el ancho normal
+    col_nueva_data = 3
+    sheet.column_dimensions[sheet.cell(row=1, column=col_nueva_data).column_letter].width = 90 
 
     # Añadir imágenes a una nueva columna al final
     col_img = sheet.max_column + 1
     sheet.cell(row=1, column=col_img).value = "Imagen"
 
-    # Añadir imágenes en la nueva columna para cada SKU
-    for index, sku in enumerate(skus, start=2):
+    # Añadir imágenes en la nueva columna para cada SKU en df
+    for index, sku in enumerate(df['SKU'], start=2):
         imagen_path = None
         extensiones_imagen = ['jpeg']
-
-        # Ruta de la carpeta 'imagenes' en Descargas
         ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
 
         for ext in extensiones_imagen:
@@ -704,18 +684,14 @@ def generar_reporte_excel(titulo_categoria):
                 break
 
         if imagen_path and os.path.exists(imagen_path):
-            # Insertar la imagen en la última columna para cada fila
             img = ExcelImage(imagen_path)
             img.width = 100
             img.height = 100
-
-            # Calcular la altura de la fila según el alto de la imagen
             fila = index
-            altura_fila = img.height * 0.75  
-            sheet.row_dimensions[fila].height = altura_fila 
-
+            sheet.row_dimensions[fila].height = img.height * 0.75 
             img_anchor = sheet.cell(row=fila, column=col_img).coordinate 
             sheet.add_image(img, img_anchor)
+
     # Aplicar formato condicional para resaltar en rojo las celdas con "False" en las columnas "URL Coincide con SKU" y "Tiene Imagen"
     red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
 
@@ -725,12 +701,24 @@ def generar_reporte_excel(titulo_categoria):
             if cell.value == False:
                 cell.fill = red_fill
 
-
     # Columna "Tiene Imagen"
     for row in sheet.iter_rows(min_row=2, min_col=col_tiene_imagen, max_col=col_tiene_imagen, max_row=sheet.max_row):
         for cell in row:
             if cell.value == False:
                 cell.fill = red_fill
+    # Marcar los SKUs duplicados en color naranja
+    orange_fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")
 
-    # Guardar el archivo Excel con las imágenes insertadas
+    # Identificar duplicados en la columna SKU
+    sku_column = sheet['A'][1:]  # Column A, excluding header
+    sku_values = [cell.value for cell in sku_column]
+    duplicated_skus = {sku for sku in sku_values if sku_values.count(sku) > 1}
+
+    # Aplicar el color naranja a los duplicados
+    for cell in sku_column:
+        if cell.value in duplicated_skus:
+            cell.fill = orange_fill
+
+    # Guardar el archivo Excel con todas las validaciones e imágenes insertadas
     workbook.save(nombre_archivo_excel)
+    print(f"Reporte consolidado guardado en {nombre_archivo_excel}")
