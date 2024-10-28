@@ -3,7 +3,13 @@ from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor
 
 def initialize_storage_client():
-    return storage.Client.from_service_account_json('')
+    # Obtener la ruta del JSON desde el .env
+    json_path = os.getenv('STORAGE_SERVICE_ACCOUNT_JSON_PATH')
+    if not json_path:
+        raise ValueError("La ruta del archivo JSON no está definida en el archivo .env")
+    
+    client = storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra_2/quotes-381505-09ca05ec8b5e.json')
+    return client
 
 # Función para vaciar la carpeta de imagenes_subidas en lugar de todo el bucket
 def empty_bucket_folder(bucket_name, folder_name):
@@ -33,7 +39,7 @@ def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
     file_paths = [
         os.path.join(folder_path, filename)
         for filename in os.listdir(folder_path)
-        if os.path.isfile(os.path.join(folder_path, filename))
+        if filename.lower().endswith(('.jpeg')) and os.path.isfile(os.path.join(folder_path, filename))
     ]
 
     # Usar ThreadPoolExecutor para subir las imágenes en paralelo
@@ -57,8 +63,8 @@ def count_images_in_bucket(bucket_name, folder_name):
     # Listar los blobs que están dentro de la carpeta especificada
     blobs = list(bucket.list_blobs(prefix=folder_name))
     
-    # Filtrar solo imágenes por su tipo MIME (esto depende del formato de imágenes que estés utilizando, por ejemplo, PNG o JPG)
-    image_count = sum(1 for blob in blobs if blob.name.endswith(('.png', '.jpg', '.jpeg', '.gif')))
+    # Filtrar solo imágenes por su tipo MIME
+    image_count = sum(1 for blob in blobs if blob.name.endswith(('.jpeg')))
     
     print(f"La carpeta '{folder_name}' en el bucket '{bucket_name}' contiene {image_count} imágenes.")
     return image_count
@@ -118,5 +124,59 @@ def upload_image_buffer(bucket_name, folder_name, image_name, image_buffer):
     client = initialize_storage_client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(f'{folder_name}/{image_name}')
-    blob.upload_from_file(image_buffer, content_type='image/jpeg')  # Ajustar el tipo MIME si es PNG o GIF
+    blob.upload_from_file(image_buffer, content_type='image/jpeg')
     print(f"La imagen {image_name} fue subida exitosamente al bucket {bucket_name}/{folder_name}.")
+
+def check_image_in_bucket(bucket_name, folder_name, image_name):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    
+    # Crear el nombre completo del blob (ruta en el bucket)
+    blob_name = f"{folder_name}/{image_name}"
+    
+    # Verificar si el blob existe en el bucket
+    blob = bucket.blob(blob_name)
+    return blob.exists()
+
+def check_images_in_bucket(bucket_name, folder_name, image_names):
+    client = initialize_storage_client()
+    results = {}
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {
+            executor.submit(check_image_in_bucket, client, bucket_name, folder_name, image_name): image_name
+            for image_name in image_names
+        }
+        
+        for future in futures:
+            image_name = futures[future]
+            try:
+                exists = future.result()
+                results[image_name] = exists
+                if exists:
+                    print(f"La imagen {image_name} ya existe en el bucket {bucket_name}/{folder_name}.")
+                else:
+                    print(f"La imagen {image_name} no se encontró en el bucket {bucket_name}/{folder_name}.")
+            except Exception as e:
+                print(f"Error al verificar la imagen {image_name}: {str(e)}")
+    
+    return results
+
+def get_default_image_buffer(bucket_name, default_image_name):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    
+    # Crear el nombre completo del blob (ruta en el bucket)
+    blob = bucket.blob(default_image_name)
+    
+    # Verificar si el blob existe antes de intentar descargarlo
+    if blob.exists():
+        # Descargar el contenido del blob en un buffer
+        image_buffer = io.BytesIO()
+        blob.download_to_file(image_buffer)
+        image_buffer.seek(0)  # Reiniciar el puntero del buffer al inicio
+        print(f"Imagen predeterminada '{default_image_name}' descargada exitosamente.")
+        return image_buffer
+    else:
+        print(f"Imagen predeterminada '{default_image_name}' no se encontró en el bucket '{bucket_name}'.")
+        return None
