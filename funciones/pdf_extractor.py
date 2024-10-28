@@ -121,11 +121,18 @@ def extraer_informacion(page):
                             primer_sku = skus_encontrados[0]
 
                             # Verificar si el primer SKU ya está en la lista de SKUs
-                            if primer_sku not in skus:
+                            if primer_sku in skus and len(skus_encontrados) > 1:
+                                # Si el primer SKU ya existe, combinarlo con el segundo SKU
+                                segundo_sku = skus_encontrados[1]
+                                sku_combination = f"{primer_sku} y {segundo_sku}"
+                                skus.append(sku_combination)
+                                sku_positions.append((sku_combination, text_y_position))
+                            elif primer_sku not in skus:
+                                # Si el primer SKU no existe, agregarlo normalmente
                                 skus.append(primer_sku)
                                 sku_positions.append((primer_sku, text_y_position))  # Registrar posición del primer SKU
                             elif len(skus_encontrados) > 1:
-                                # Si el primer SKU ya existe, usar el segundo
+                                # Si el primer SKU ya existe y hay un segundo, usar el segundo SKU solo
                                 segundo_sku = skus_encontrados[1]
                                 skus.append(segundo_sku)
                                 sku_positions.append((segundo_sku, text_y_position))  # Registrar posición del segundo SKU
@@ -536,7 +543,8 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             
             # Verificar si el subtítulo es 'Producto'
             if subtitulo == 'Producto':
-                subtitulo = "Producto: Producto"
+                categoria = titulos[0] if titulos else "Categoría Desconocida"
+                subtitulo = f"Producto: Promoción {categoria}"
                 content = f"Pago semanal: NA\nDescuento: {datos_producto}\nPago de contado: NA"
             else:
                 # Si no es 'Producto', aplicar las transformaciones habituales
@@ -718,6 +726,17 @@ def generar_reporte_excel_general():
     for cell in sku_column:
         if cell.value in duplicated_skus:
             cell.fill = orange_fill
+    
+    # Marcar en amarillo las celdas de "Nueva Data Producto" si el subtítulo comienza con "Producto: Promoción"
+    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    col_nueva_data = 3  # Columna "Nueva Data Producto" (ajustar si está en otro índice)
+
+    for index, data in enumerate(nueva_data_productos, start=2):  # Comienza en la fila 2
+        subtitulo = data[2]  # Índice del subtítulo en `nueva_data_productos`
+        if subtitulo.startswith("Producto: Promoción"):
+            cell = sheet.cell(row=index, column=col_nueva_data)
+            cell.fill = yellow_fill
+
 
     # Guardar el archivo Excel con todas las validaciones e imágenes insertadas
     workbook.save(nombre_archivo_excel)
