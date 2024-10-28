@@ -3,6 +3,7 @@ from flask_cors import CORS  # Importar CORS
 from funciones import watson_discovery as wd
 from funciones import pdf_extractor as pe
 from funciones import image_storage as st
+from funciones import elastict_search as es
 from funciones.token import verificar_token, generate_token 
 from dotenv import load_dotenv
 import os
@@ -15,9 +16,41 @@ load_dotenv()
 bucket_name = os.getenv('bucket_name')
 carpeta_imagenes_bucket = os.getenv('carpeta_imagenes_bucket')
 carpeta_pdfs_bucket = os.getenv('carpeta_pdfs_bucket')
+documentos_dummy = './imagenes'
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Endpoint para subir archivos de una carpeta al índice
+@app.route('/subir_archivos', methods=['POST'])
+def subir_archivos():
+    try:
+        data = request.get_json()
+        indice = data.get('indice')
+
+        if not indice:
+            return jsonify({"error": "Falta el parámetro 'indice'"}), 400
+
+        # Subir todos los archivos de la carpeta al índice especificado
+        es.subir_archivos_de_carpeta(indice, documentos_dummy)
+
+        return jsonify({"mensaje": f"Archivos subidos correctamente al índice {indice}"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+# Endpoint para eliminar documentos por categoría
+@app.route('/eliminar_documentos_categoria', methods=['DELETE'])
+def eliminar_documentos_categoria():
+    try:
+        data = request.get_json()
+        categoria = data.get('categoria', " ") 
+
+        resultado = es.eliminar_documentos_por_categoria(categoria)
+        return jsonify({"mensaje": resultado}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Endpoint para generar un token dinámico
 @app.route('/generate_token', methods=['GET'])
@@ -48,20 +81,22 @@ def procesar_y_subir():
         # st.empty_bucket_folder(bucket_name, carpeta_pdfs_bucket)
 
         # Paso 2: Eliminar las imágenes de Google Cloud Storage
-        # st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
+        #st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
 
         # Paso 3: Eliminar documentos
         # wd.eliminar_documentos()
-        
+        #es.eliminar_documentos("catalogo")
+
         pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
+        pe.particion_pdf(pdf_buffer, bucket_name,carpeta_pdfs_bucket)
 
         # Paso 4: Esperar a que se hayan eliminado todos los documentos para subir los nuevos a discovery
         ''''
         while True:
-            total_documentos = wd.contar_documentos()
+            total_documentos = es.contar_documentos("catalogo")
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                # pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
+                pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
                 print("PDF procesado exitosamente.")
                 break
             else:
