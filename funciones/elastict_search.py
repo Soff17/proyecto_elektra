@@ -18,9 +18,7 @@ es = Elasticsearch(
 )
 
 # Función para subir todos los archivos de una carpeta a Elasticsearch
-def subir_archivos_de_carpeta(indice, documentos_dummy):
-    carpeta = documentos_dummy
-
+def subir_archivos_de_carpeta(indice, carpeta):
     def subir_archivo(ruta_archivo, nombre_archivo):
         try:
             with open(ruta_archivo, 'rb') as archivo:
@@ -33,7 +31,7 @@ def subir_archivos_de_carpeta(indice, documentos_dummy):
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
-        for ruta_carpeta, _, archivos in os.walk(carpeta):
+        for ruta_carpeta, _, archivos in os.walk(carpeta):  # Usa la carpeta proporcionada
             for archivo in archivos:
                 ruta_archivo = os.path.join(ruta_carpeta, archivo)
                 futures.append(executor.submit(subir_archivo, ruta_archivo, archivo))

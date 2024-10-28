@@ -22,19 +22,24 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Endpoint para subir archivos de una carpeta al índice
-@app.route('/subir_archivos', methods=['POST'])
+@app.route('/subir_archivos_carpeta', methods=['POST'])
 def subir_archivos():
     try:
+        verificar_token()
         data = request.get_json()
         indice = data.get('indice')
+        carpeta = data.get('carpeta')  # Capturamos la carpeta desde el body de la solicitud
 
         if not indice:
             return jsonify({"error": "Falta el parámetro 'indice'"}), 400
 
-        # Subir todos los archivos de la carpeta al índice especificado
-        es.subir_archivos_de_carpeta(indice, documentos_dummy)
+        if not carpeta:
+            return jsonify({"error": "Falta el parámetro 'carpeta'"}), 400
 
-        return jsonify({"mensaje": f"Archivos subidos correctamente al índice {indice}"}), 200
+        # Subir todos los archivos de la carpeta al índice especificado
+        es.subir_archivos_de_carpeta(indice, carpeta)
+
+        return jsonify({"mensaje": f"Archivos subidos correctamente al índice {indice} desde la carpeta {carpeta}"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -43,6 +48,7 @@ def subir_archivos():
 @app.route('/eliminar_documentos_categoria', methods=['DELETE'])
 def eliminar_documentos_categoria():
     try:
+        verificar_token()
         data = request.get_json()
         categoria = data.get('categoria', " ") 
 
@@ -59,7 +65,7 @@ def generate_token_endpoint():
     return jsonify({"token": token}), 200
 
 # Endpoint para procesamiento de documento e imágenes
-@app.route('/new_documents', methods=['POST'])
+@app.route('/ingesta_documentos', methods=['POST'])
 def procesar_y_subir():
     try:
         # Verificar el token antes de proceder
@@ -85,7 +91,7 @@ def procesar_y_subir():
 
         # Paso 3: Eliminar documentos
         # wd.eliminar_documentos()
-        #es.eliminar_documentos("catalogo")
+        # es.eliminar_documentos("catalogo")
 
         pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
         pe.particion_pdf(pdf_buffer, bucket_name,carpeta_pdfs_bucket)
