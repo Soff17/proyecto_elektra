@@ -238,7 +238,8 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
     # Usar hilos para subir las imágenes
     with ThreadPoolExecutor() as executor:
         futures = [
-            executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, image_name, image_buffer)
+            #executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, image_name, image_buffer)
+            executor.submit(bucket_name, bucket_folder, image_name, image_buffer)
             for bucket_name, bucket_folder, image_name, image_buffer in uploads
         ]
 
@@ -266,7 +267,8 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
                 # Subir la imagen predeterminada al bucket usando hilos
                 default_image_buffer = io.BytesIO(default_image_bytes)
                 with ThreadPoolExecutor() as executor:
-                    executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
+                    #executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
+                    executor.submit(bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
                 print(f"Imagen predeterminada asignada y subida para el SKU {sku}.")
 
             else:
@@ -369,10 +371,12 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
         for task in tasks:
             if task[0] == "elasticsearch":
                 documento, name_file = task[1], task[2]
-                futures.append(executor.submit(es.indexar_documento, "catalogo", name_file, documento))
+                #futures.append(executor.submit(es.indexar_documento, "catalogo", name_file, documento))
+                futures.append(executor.submit("catalogo", name_file, documento))
             elif task[0] == "storage":
                 _, bucket, folder, filename, buffer = task
-                futures.append(executor.submit(st.upload_text_buffer, bucket, folder, filename, buffer))
+                #futures.append(executor.submit(st.upload_text_buffer, bucket, folder, filename, buffer))
+                futures.append(executor.submit(bucket, folder, filename, buffer))
 
         # Verificar y manejar posibles errores en las subidas
         for future in futures:
@@ -419,7 +423,7 @@ def guardar_en_correcciones(name_file, contenido, bucket_name, carpeta_documento
         print(f"'{name_file}.txt' guardado en 'correcciones' para revisión.")
 
     def subir_a_storage():
-        st.upload_text_buffer(bucket_name, carpeta_documentos_correcciones_bucket, f"{name_file}.txt", buffer)
+        #st.upload_text_buffer(bucket_name, carpeta_documentos_correcciones_bucket, f"{name_file}.txt", buffer)
         print(f"'{name_file}.txt' también subido a storage en 'correcciones'.")
 
     # Ejecutar las tareas en paralelo usando ThreadPoolExecutor
@@ -501,7 +505,7 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
         pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
 
         # Subir el PDF al bucket directamente desde el buffer
-        st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
+        #st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
         doc_pagina.close()
