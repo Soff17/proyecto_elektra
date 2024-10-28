@@ -16,6 +16,8 @@ load_dotenv()
 bucket_name = os.getenv('bucket_name')
 carpeta_imagenes_bucket = os.getenv('carpeta_imagenes_bucket')
 carpeta_pdfs_bucket = os.getenv('carpeta_pdfs_bucket')
+carpeta_documentos_correcciones_bucket = os.getenv('carpeta_documentos_correcciones_bucket')
+carpeta_documentos_elastic_bucket = os.getenv('carpeta_documentos_elastic_bucket')
 documentos_dummy = './imagenes'
 
 app = Flask(__name__)
@@ -84,31 +86,31 @@ def procesar_y_subir():
         pdf_buffer = io.BytesIO(pdf_file.read())
 
         # Paso 1: Eliminar los pdf de Google Cloud Storage
-        # st.empty_bucket_folder(bucket_name, carpeta_pdfs_bucket)
+        st.empty_bucket_folder(bucket_name, carpeta_pdfs_bucket)
 
         # Paso 2: Eliminar las imágenes de Google Cloud Storage
-        #st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
+        st.empty_bucket_folder(bucket_name, carpeta_imagenes_bucket)
 
         # Paso 3: Eliminar documentos
         # wd.eliminar_documentos()
-        # es.eliminar_documentos("catalogo")
+        es.eliminar_documentos("catalogo")
 
-        pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
-        pe.particion_pdf(pdf_buffer, bucket_name,carpeta_pdfs_bucket)
+        # Paso 4: Eliminar respaldos
+        st.empty_bucket_folder(bucket_name, carpeta_documentos_correcciones_bucket)
+        st.empty_bucket_folder(bucket_name, carpeta_documentos_elastic_bucket)
 
         # Paso 4: Esperar a que se hayan eliminado todos los documentos para subir los nuevos a discovery
-        ''''
         while True:
             total_documentos = es.contar_documentos("catalogo")
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
-                pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket)
+                pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
+                pe.particion_pdf(pdf_buffer, bucket_name,carpeta_pdfs_bucket)
                 print("PDF procesado exitosamente.")
                 break
             else:
                 print(f"Aún quedan {total_documentos} documentos. Esperando...")
             time.sleep(5)
-        '''
         return jsonify({"message": "Proceso completo: documentos eliminados, PDF procesado, archivos e imágenes subidas"}), 200
 
     except Exception as e:
