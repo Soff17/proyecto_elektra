@@ -319,19 +319,31 @@ def guardar_informacion_a_elasticsearch(name_file, data):
     # Generar el contenido del archivo como una cadena
     contenido_txt = "\n".join(data)
 
-    # Subir directamente a Elasticsearch
+    # Validar si la URL contiene el SKU y si la imagen existe
+    sku = data[0].replace("Sku: ", "")
+    url = data[-1].replace("Url: ", "")
+    imagen_existe = tiene_imagen(sku)
+    subtitulo = data[2]
+
+    # Si la URL no coincide con el SKU o no existe la imagen, guardar en 'correcciones' en lugar de subir a Elasticsearch
+    # Revisar condiciones de corrección
+    if sku not in url or not imagen_existe or subtitulo.startswith("Producto: Promoción"):
+        guardar_en_correcciones(name_file, contenido_txt)
+        print(f"'{name_file}.txt' guardado en 'correcciones' debido a validación fallida.")
+        return
+
+    # Subir el documento a Elasticsearch
     documento = {
         "titulo": f"{name_file}",
         "contenido": contenido_txt
     }
     
-    # Subir el documento a Elasticsearch
-    #es.indexar_documento("catalogo", f"{titulo} {name_file}", documento) 
+    #es.indexar_documento("catalogo", f"{name_file}", documento)
     print(f'Se está subiendo "{name_file}.txt" a Elasticsearch.')
 
     # Guardar el archivo localmente
     downloads_folder = get_downloads_folder()
-    ruta_output_files = os.path.join(downloads_folder, 'output_files')
+    ruta_output_files = os.path.join(downloads_folder, 'documentos_elastic')
     
     if not os.path.exists(ruta_output_files):
         os.makedirs(ruta_output_files)
@@ -342,6 +354,29 @@ def guardar_informacion_a_elasticsearch(name_file, data):
     # Guardar el contenido en un archivo local
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(contenido_txt)
+
+def tiene_imagen(sku):
+    # Verifica si existe una imagen para el SKU
+    extensiones_imagen = ['jpeg']
+    downloads_folder = get_downloads_folder()
+    ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
+    for ext in extensiones_imagen:
+        if os.path.exists(f"{ruta_imagenes}/{sku}.{ext}"):
+            return True
+    return False
+
+def guardar_en_correcciones(name_file, contenido):
+    # Guardar en la carpeta 'correcciones' dentro de Descargas
+    downloads_folder = get_downloads_folder()
+    ruta_correcciones = os.path.join(downloads_folder, 'documentos_correcciones')
+    
+    if not os.path.exists(ruta_correcciones):
+        os.makedirs(ruta_correcciones)
+
+    file_path = os.path.join(ruta_correcciones, f"{name_file}.txt")
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write(contenido)
+    print(f"'{name_file}.txt' guardado en 'correcciones' para revisión.")
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
@@ -496,6 +531,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             vigencia = vigencias[i] if i < len(vigencias) else ""
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             datos_producto = info[i] if i < len(info) else ""
+            subtitulo = subtitulo.replace('con hasta', '')
 
             if titulos[0] == "Planes":
                 subtitulo = re.sub(r'^.*?Llévate un', '', subtitulo).strip()
