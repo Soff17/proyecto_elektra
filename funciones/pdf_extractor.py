@@ -561,6 +561,7 @@ def ajustar_longitudes_listas():
     nueva_data_productos.extend([["", "", "", "", "", "", ""]] * (max_length - len(nueva_data_productos)))
 
 def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket):
+    nueva_data_productos.clear()
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
 
@@ -648,6 +649,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 if match and titulos[0] != 'Planes':
                     subtitulo = f"Producto: {subtitulo} {match.group(1).strip()}"
                     datos_producto = datos_producto.replace(match.group(1), "").strip()
+                    subtitulo = subtitulo.replace('$ ', '')
                 elif titulos[0] == "Planes":
                     subtitulo = f"Producto: {subtitulo}"
                     datos_producto = datos_producto
