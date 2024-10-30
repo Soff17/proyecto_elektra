@@ -306,21 +306,36 @@ def get_urls(page):
     links = page.get_links()
     urls_with_rect = []
 
-    # Extraer URL y Rect de cada link y almacenar en lista de tuplas
+    # Extract URL and Rect from each link and store in a list of tuples
     for link in links:
         if 'uri' in link and 'from' in link:
             url = link['uri']
             rect = link['from']
-            coordenadas = [rect[0], rect[1], rect[2], rect[3]]
-            urls_with_rect.append((url, coordenadas))
+            coordinates = [rect[0], rect[1], rect[2], rect[3]]
+            urls_with_rect.append((url, coordinates))
 
-    # Ordenar los URLs basados en las coordenadas rectangulares (x, y)
+    # Sort the URLs based on rectangular coordinates (x, y)
     urls_sorted = sorted(urls_with_rect, key=lambda x: (x[1][1], x[1][0]))
 
-    # Extraer solo los URLs ya ordenados
-    urls_sor = [url for url, _ in urls_sorted]
-    for url in urls_sor:
-        urls.append(url)
+    # Extract only the sorted URLs
+    urls_sorted = [url for url, _ in urls_sorted]
+
+    # Iterate through each SKU and match with URLs
+    for i in range(len(skus)):
+        sku = skus[i]
+        original_url = urls_sorted[i] if i < len(urls_sorted) else None
+        matched_url = None
+
+        for url in urls_sorted:
+            if sku in url:
+                matched_url = url
+                break
+
+        # If no matched URL found, use the original URL instead of "dummy-url"
+        if not matched_url:
+            matched_url = original_url if original_url else "dummy-url"
+
+        urls.append(matched_url)
 
 def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket):   
     # Generar el contenido del archivo como una cadena
