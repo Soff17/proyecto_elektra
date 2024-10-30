@@ -15,12 +15,13 @@ def initialize_storage_client():
 def empty_bucket_folder(bucket_name, folder_name):
     client = initialize_storage_client()
     bucket = client.bucket(bucket_name)
-    
-    # Listar solo los blobs que están dentro de la carpeta especificada
     blobs = list(bucket.list_blobs(prefix=folder_name))
     
     if blobs:
-        bucket.delete_blobs(blobs)
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(bucket.delete_blob, blob.name) for blob in blobs]
+            for future in futures:
+                future.result()
         print(f"Todas las imágenes en la carpeta '{folder_name}' han sido eliminadas del bucket '{bucket_name}'.")
     else:
         print(f"No hay imágenes en la carpeta '{folder_name}' dentro del bucket '{bucket_name}'.")
@@ -31,29 +32,23 @@ def upload_image(client, bucket_name, file_path, blob_name):
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(file_path)
 
-# Función para subir múltiples imágenes a una carpeta en el bucket de forma concurrente
+# Función para subir múltiples imágenes concurrentemente
 def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
     client = initialize_storage_client()
-    
-    # Crear una lista de archivos en la carpeta local
     file_paths = [
         os.path.join(folder_path, filename)
         for filename in os.listdir(folder_path)
-        if filename.lower().endswith(('.jpeg')) and os.path.isfile(os.path.join(folder_path, filename))
+        if filename.lower().endswith('.jpeg') and os.path.isfile(os.path.join(folder_path, filename))
     ]
 
-    # Usar ThreadPoolExecutor para subir las imágenes en paralelo
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [
-            executor.submit(
-                upload_image, client, bucket_name, file_path, f'{bucket_folder_name}/{os.path.basename(file_path)}'
-            )
+            executor.submit(upload_image, client, bucket_name, file_path, f'{bucket_folder_name}/{os.path.basename(file_path)}')
             for file_path in file_paths
         ]
-        
-        # Asegurarse de que todas las subidas hayan terminado
         for future in futures:
             future.result()
+
 
 # Función para contar las imágenes en una carpeta específica del bucket
 def count_images_in_bucket(bucket_name, folder_name):
@@ -78,24 +73,17 @@ def upload_pdf(client, bucket_name, file_path, blob_name):
 # Function to upload multiple PDFs concurrently
 def upload_pdfs_in_folder(bucket_name, folder_path, bucket_folder_name):
     client = initialize_storage_client()
-    
-    # Create a list of files in the local folder (only PDFs)
     file_paths = [
         os.path.join(folder_path, filename)
         for filename in os.listdir(folder_path)
         if filename.endswith('.pdf') and os.path.isfile(os.path.join(folder_path, filename))
     ]
 
-    # Use ThreadPoolExecutor to upload the PDFs in parallel
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [
-            executor.submit(
-                upload_pdf, client, bucket_name, file_path, f'{bucket_folder_name}/{os.path.basename(file_path)}'
-            )
+            executor.submit(upload_pdf, client, bucket_name, file_path, f'{bucket_folder_name}/{os.path.basename(file_path)}')
             for file_path in file_paths
         ]
-        
-        # Ensure all uploads are complete
         for future in futures:
             future.result()
 
@@ -138,29 +126,25 @@ def check_image_in_bucket(bucket_name, folder_name, image_name):
     blob = bucket.blob(blob_name)
     return blob.exists()
 
+# Esta función optimizada reemplaza la llamada a st.check_image_in_bucket para múltiples imágenes
 def check_images_in_bucket(bucket_name, folder_name, image_names):
     client = initialize_storage_client()
-    results = {}
+    bucket = client.bucket(bucket_name)
+    all_blobs = list(bucket.list_blobs(prefix=folder_name))  # Obtener todos los blobs una vez
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {
-            executor.submit(check_image_in_bucket, client, bucket_name, folder_name, image_name): image_name
-            for image_name in image_names
-        }
-        
-        for future in futures:
-            image_name = futures[future]
-            try:
-                exists = future.result()
-                results[image_name] = exists
-                if exists:
-                    print(f"La imagen {image_name} ya existe en el bucket {bucket_name}/{folder_name}.")
-                else:
-                    print(f"La imagen {image_name} no se encontró en el bucket {bucket_name}/{folder_name}.")
-            except Exception as e:
-                print(f"Error al verificar la imagen {image_name}: {str(e)}")
-    
+    # Crear un set con los nombres de los blobs para facilitar la búsqueda
+    existing_images = {blob.name.split('/')[-1] for blob in all_blobs if blob.name.endswith('.jpeg')}
+
+    # Crear un diccionario de resultados basado en la existencia en el set de imágenes
+    results = {image_name: image_name in existing_images for image_name in image_names}
+
+    # Mostrar el estado de cada imagen
+    for image_name, exists in results.items():
+        status = "existe" if exists else "no se encontró"
+        print(f"La imagen {image_name} {status} en el bucket {bucket_name}/{folder_name}.")
+
     return results
+
 
 def get_default_image_buffer(bucket_name, default_image_name):
     client = initialize_storage_client()
@@ -180,3 +164,10 @@ def get_default_image_buffer(bucket_name, default_image_name):
     else:
         print(f"Imagen predeterminada '{default_image_name}' no se encontró en el bucket '{bucket_name}'.")
         return None
+
+def upload_text_buffer(bucket_name, folder_name, file_name, text_buffer):
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(f'{folder_name}/{file_name}')
+    blob.upload_from_file(text_buffer, content_type='text/plain')
+    print(f"El archivo de texto '{file_name}' fue subido exitosamente al bucket '{bucket_name}/{folder_name}'.")
