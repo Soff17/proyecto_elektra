@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import os
 import time
 import io
+from elasticsearch.exceptions import NotFoundError
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -23,8 +24,41 @@ documentos_dummy = './imagenes'
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+@app.route('/eliminar_documentos', methods=['DELETE'])
+def eliminar_documentos():
+    try:
+        verificar_token()
+        data = request.get_json()
+        indice = data.get('indice')
+        documento_ids = data.get('documento_ids')
+
+        if not indice:
+            return jsonify({"error": "Falta el parámetro 'indice'"}), 400
+        if not documento_ids:
+            return jsonify({"error": "Falta el parámetro 'documento_ids'"}), 400
+
+        # Asegurarse de que documento_ids es una lista, incluso si es solo un ID
+        if isinstance(documento_ids, str):
+            documento_ids = [documento_ids]
+
+        resultados = []
+        for doc_id in documento_ids:
+            try:
+                # Usar directamente el método delete de la instancia `es`
+                es.eliminar_documento("catalogo",doc_id )
+                resultados.append({"documento_id": doc_id, "status": "eliminado"})
+            except NotFoundError:
+                resultados.append({"documento_id": doc_id, "status": "Documento no encontrado"})
+            except Exception as e:
+                resultados.append({"documento_id": doc_id, "status": f"Error: {str(e)}"})
+
+        return jsonify({"resultados": resultados}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        
 # Endpoint para subir archivos de una carpeta al índice
-@app.route('/subir_archivos_carpeta', methods=['POST'])
+@app.route('/subir_archivos', methods=['POST'])
 def subir_archivos():
     try:
         verificar_token()
@@ -55,20 +89,6 @@ def subir_archivos():
         es.subir_archivos_de_carpeta(indice, carpeta)
 
         return jsonify({"mensaje": f"Archivos subidos correctamente al índice {indice} desde la carpeta {carpeta}"}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    
-# Endpoint para eliminar documentos por categoría
-@app.route('/eliminar_documentos_categoria', methods=['DELETE'])
-def eliminar_documentos_categoria():
-    try:
-        verificar_token()
-        data = request.get_json()
-        categoria = data.get('categoria', " ") 
-
-        resultado = es.eliminar_documentos_por_categoria(categoria)
-        return jsonify({"mensaje": resultado}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
