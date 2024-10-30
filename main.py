@@ -28,6 +28,17 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 def subir_archivos():
     try:
         verificar_token()
+        es.eliminar_documentos("catalogo")
+        # Paso 2: Esperar a que el índice esté vacío
+        while True:
+            total_documentos = es.contar_documentos("catalogo")
+            if total_documentos == 0:
+                print("Todos los documentos han sido eliminados del índice. Comenzando la indexación.")
+                break
+            else:
+                print(f"Aún quedan {total_documentos} documentos en el índice. Esperando...")
+                time.sleep(5)  # Espera 5 segundos antes de volver a verificar
+
         data = request.get_json()
         indice = data.get('indice')
         carpeta = data.get('carpeta')  # Capturamos la carpeta desde el body de la solicitud
