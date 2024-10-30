@@ -10,6 +10,7 @@ import os
 import time
 import io
 from elasticsearch.exceptions import NotFoundError
+from concurrent.futures import ThreadPoolExecutor
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -24,6 +25,57 @@ documentos_dummy = './imagenes'
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Endpoint para eliminar imágenes por su nombre en Google Cloud Storage
+@app.route('/eliminar_imagenes', methods=['DELETE'])
+def eliminar_imagenes():
+    try:
+        verificar_token()
+        data = request.get_json()
+        imagenes_nombres = data.get('imagenes_nombres')
+        
+        if not imagenes_nombres:
+            return jsonify({"error": "Falta el parámetro 'imagenes_nombres'"}), 400
+
+        if isinstance(imagenes_nombres, str):
+            imagenes_nombres = [imagenes_nombres]
+
+        client = st.initialize_storage_client()
+        resultados = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [
+                executor.submit(lambda name: st.empty_bucket_folder(bucket_name, f"imagenes_prueba/{name}"), nombre)
+                for nombre in imagenes_nombres
+            ]
+            for future, nombre in zip(futures, imagenes_nombres):
+                try:
+                    future.result()
+                    resultados.append({"imagen_nombre": nombre, "status": "eliminada"})
+                except Exception as e:
+                    resultados.append({"imagen_nombre": nombre, "status": f"Error: {str(e)}"})
+
+        return jsonify({"resultados": resultados}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Endpoint para subir imágenes desde una carpeta local a Google Cloud Storage
+@app.route('/subir_imagenes_carpeta', methods=['POST'])
+def subir_imagenes_carpeta():
+    try:
+        verificar_token()
+        data = request.get_json()
+        folder_path = data.get('folder_path')
+
+        if not folder_path:
+            return jsonify({"error": "Falta el parámetro 'folder_path'"}), 400
+
+        st.upload_images_in_folder(bucket_name, folder_path, "imagenes_prueba")
+
+        return jsonify({"mensaje": "Imágenes subidas correctamente"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 @app.route('/eliminar_documentos', methods=['DELETE'])
 def eliminar_documentos():
     try:

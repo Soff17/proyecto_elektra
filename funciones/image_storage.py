@@ -32,6 +32,22 @@ def upload_image(client, bucket_name, file_path, blob_name):
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(file_path)
 
+def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
+    client = initialize_storage_client()
+    file_paths = [
+        os.path.join(folder_path, filename)
+        for filename in os.listdir(folder_path)
+        if filename.lower().endswith('.jpeg') and os.path.isfile(os.path.join(folder_path, filename))
+    ]
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [
+            executor.submit(upload_image, client, bucket_name, file_path, f'{bucket_folder_name}/{os.path.basename(file_path)}')
+            for file_path in file_paths
+        ]
+        for future in futures:
+            future.result()
+
 # Función para subir múltiples imágenes concurrentemente
 def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
     client = initialize_storage_client()
