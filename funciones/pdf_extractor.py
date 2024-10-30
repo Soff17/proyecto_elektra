@@ -198,8 +198,10 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
     # Ordenamos las imágenes por su posición Y en la página
     images_sorted = sorted(imagenes, key=lambda img: img[1][3], reverse=False)
     
-    # Asignar imágenes al SKU más cercano basado en las posiciones
+    # Crear lista para las subidas
+    uploads = []
     count = 0
+
     for xref, bbox in images_sorted:
         base_image = doc.extract_image(xref)
         image_bytes = base_image["image"]
@@ -225,13 +227,28 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         ruta_imagen = os.path.join(ruta_imagenes, image_name)
         with open(ruta_imagen, "wb") as f:
             f.write(image_bytes)
-            
-        # Subir la imagen directamente desde el buffer al bucket
+        
+        # Preparar la subida con los datos de la imagen
         image_buffer = io.BytesIO(image_bytes)
-        #st.upload_image_buffer(bucket_name, bucket_folder, image_name, image_buffer)
+        uploads.append((bucket_name, bucket_folder, image_name, image_buffer))
 
-        print(f"Imagen {image_name} subida exitosamente al bucket.")
+        print(f"Preparado para subir imagen {image_name} al bucket.")
         count += 1
+
+    # Usar hilos para subir las imágenes
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            #executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, image_name, image_buffer)
+            executor.submit(bucket_name, bucket_folder, image_name, image_buffer)
+            for bucket_name, bucket_folder, image_name, image_buffer in uploads
+        ]
+
+        # Capturar errores en las subidas
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error al subir la imagen: {e}")
 
     # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' desde Descargas/imagenes
     for sku, _ in sku_positions:
@@ -243,30 +260,20 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
                 
                 # Copiar localmente la imagen predeterminada
                 with open(ruta_default, "rb") as f_default, open(ruta_imagen, "wb") as f_sku:
-                    f_sku.write(f_default.read())
+                    default_image_bytes = f_default.read()
+                    f_sku.write(default_image_bytes)
                 print(f"Imagen predeterminada asignada al SKU {sku} localmente.")
+
+                # Subir la imagen predeterminada al bucket usando hilos
+                default_image_buffer = io.BytesIO(default_image_bytes)
+                with ThreadPoolExecutor() as executor:
+                    #executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
+                    executor.submit(bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
+                print(f"Imagen predeterminada asignada y subida para el SKU {sku}.")
 
             else:
                 print(f"Imagen predeterminada no encontrada.")
-    ''''
-    # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' desde el bucket
-    for sku, _ in sku_positions:
-        # Verificar si la imagen del SKU ya fue subida
-        #image_exists = st.check_image_in_bucket(bucket_name, bucket_folder, f"{sku}.jpeg")
-        if not image_exists:
-            # Subir 'default.jpeg' desde el almacenamiento predeterminado
-            ruta_default = './default.jpeg'
-            default_image_buffer = get_default_image_buffer_from_local("./default.jpeg")
-            if default_image_buffer:
-                # st.upload_image_buffer(bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
-                print(f"Imagen predeterminada asignada al SKU {sku} subida al bucket.")
-                ruta_imagen = os.path.join(ruta_imagenes, f"{sku}.jpeg")
-                # Copiar localmente la imagen predeterminada
-                with open(ruta_default, "rb") as f_default, open(ruta_imagen, "wb") as f_sku:
-                    f_sku.write(f_default.read())
-            else:
-                print(f"Imagen predeterminada no encontrada.")
-    '''
+
 def get_default_image_buffer_from_local(default_image_path="./default.jpeg"):
     try:
         # Abrir la imagen en modo binario
@@ -315,7 +322,7 @@ def get_urls(page):
     for url in urls_sor:
         urls.append(url)
 
-def guardar_informacion_a_elasticsearch(name_file, data):   
+def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket):   
     # Generar el contenido del archivo como una cadena
     contenido_txt = "\n".join(data)
 
@@ -326,20 +333,20 @@ def guardar_informacion_a_elasticsearch(name_file, data):
     subtitulo = data[2]
 
     # Si la URL no coincide con el SKU o no existe la imagen, guardar en 'correcciones' en lugar de subir a Elasticsearch
-    # Revisar condiciones de corrección
     if sku not in url or not imagen_existe or subtitulo.startswith("Producto: Promoción"):
-        guardar_en_correcciones(name_file, contenido_txt)
+        guardar_en_correcciones(name_file, contenido_txt, bucket_name, carpeta_documentos_correcciones_bucket)
         print(f"'{name_file}.txt' guardado en 'correcciones' debido a validación fallida.")
         return
 
-    # Subir el documento a Elasticsearch
+    # Crear una lista de tareas para ejecutar en paralelo
+    tasks = []
+
+    # Subida a Elasticsearch
     documento = {
         "titulo": f"{name_file}",
         "contenido": contenido_txt
     }
-    
-    #es.indexar_documento("catalogo", f"{name_file}", documento)
-    print(f'Se está subiendo "{name_file}.txt" a Elasticsearch.')
+    tasks.append(("elasticsearch", documento, name_file))
 
     # Guardar el archivo localmente
     downloads_folder = get_downloads_folder()
@@ -348,12 +355,38 @@ def guardar_informacion_a_elasticsearch(name_file, data):
     if not os.path.exists(ruta_output_files):
         os.makedirs(ruta_output_files)
 
-    # Definir la ruta completa del archivo
     file_path = os.path.join(ruta_output_files, f"{name_file}.txt")
-
-    # Guardar el contenido en un archivo local
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(contenido_txt)
+
+    # Subida al bucket en la carpeta documentos_elastic
+    buffer = io.BytesIO(contenido_txt.encode('utf-8'))
+    buffer.seek(0)  # Asegurarse de que el buffer esté al inicio
+    tasks.append(("storage", bucket_name, carpeta_documentos_elastic_bucket, f"{name_file}.txt", buffer))
+
+    # Ejecutar las subidas en paralelo
+    # Ejecutar las subidas en paralelo
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        
+        for task in tasks:
+            if task[0] == "elasticsearch":
+                documento, name_file = task[1], task[2]
+                #futures.append(executor.submit(es.indexar_documento, "catalogo", name_file, documento))
+                futures.append(executor.submit("catalogo", name_file, documento))
+            elif task[0] == "storage":
+                _, bucket, folder, filename, buffer = task
+                #futures.append(executor.submit(st.upload_text_buffer, bucket, folder, filename, buffer))
+                futures.append(executor.submit(bucket, folder, filename, buffer))
+
+        # Verificar y manejar posibles errores en las subidas
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error al subir documento: {e}")
+
+    print(f'Se subió "{name_file}.txt" a Elasticsearch y almacenamiento exitosamente.')
 
 def tiene_imagen(sku):
     # Verifica si existe una imagen para el SKU
@@ -365,18 +398,45 @@ def tiene_imagen(sku):
             return True
     return False
 
-def guardar_en_correcciones(name_file, contenido):
-    # Guardar en la carpeta 'correcciones' dentro de Descargas
+from concurrent.futures import ThreadPoolExecutor
+import io
+import os
+
+def guardar_en_correcciones(name_file, contenido, bucket_name, carpeta_documentos_correcciones_bucket):
+    # Obtener la carpeta de descargas del usuario
     downloads_folder = get_downloads_folder()
-    ruta_correcciones = os.path.join(downloads_folder, 'documentos_correcciones')
+    ruta_correcciones = os.path.join(downloads_folder, 'correcciones')
     
     if not os.path.exists(ruta_correcciones):
         os.makedirs(ruta_correcciones)
 
+    # Ruta completa para guardar el archivo localmente
     file_path = os.path.join(ruta_correcciones, f"{name_file}.txt")
-    with open(file_path, 'w', encoding='utf-8') as file:
-        file.write(contenido)
-    print(f"'{name_file}.txt' guardado en 'correcciones' para revisión.")
+    
+    # Crear un buffer para la subida a storage
+    buffer = io.BytesIO(contenido.encode('utf-8'))
+    buffer.seek(0)  # Asegurar que el buffer esté al inicio
+
+    # Definir las tareas de guardado local y subida en paralelo
+    def guardar_local():
+        with open(file_path, 'w', encoding='utf-8') as file:
+            file.write(contenido)
+        print(f"'{name_file}.txt' guardado en 'correcciones' para revisión.")
+
+    def subir_a_storage():
+        #st.upload_text_buffer(bucket_name, carpeta_documentos_correcciones_bucket, f"{name_file}.txt", buffer)
+        print(f"'{name_file}.txt' también subido a storage en 'correcciones'.")
+
+    # Ejecutar las tareas en paralelo usando ThreadPoolExecutor
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(guardar_local), executor.submit(subir_a_storage)]
+
+        # Manejar posibles errores en ambas tareas
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error al ejecutar tarea: {e}")
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
@@ -446,7 +506,7 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
         pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
 
         # Subir el PDF al bucket directamente desde el buffer
-        # st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
+        #st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
         doc_pagina.close()
@@ -500,7 +560,7 @@ def ajustar_longitudes_listas():
     # Ajustar también la lista 'nueva_data_productos' para que coincida
     nueva_data_productos.extend([["", "", "", "", "", "", ""]] * (max_length - len(nueva_data_productos)))
 
-def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket):
+def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket):
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
 
@@ -645,7 +705,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 data = [sku_num, categoria, subtitulo, content, vigencia, url_line]
                 nueva_data_productos.append([sku_num, categoria, subtitulo, content, vigencia, url_line])
                 #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
-                guardar_informacion_a_elasticsearch(f"{sku}", data)
+                guardar_informacion_a_elasticsearch(f"{sku}", data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
                 
     generar_reporte_excel_general()
 
