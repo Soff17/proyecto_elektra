@@ -22,6 +22,7 @@ carpeta_documentos_correcciones_bucket = os.getenv('carpeta_documentos_correccio
 carpeta_documentos_elastic_bucket = os.getenv('carpeta_documentos_elastic_bucket')
 documentos_dummy = './imagenes'
 INDICE = os.getenv('INDICE')
+carpeta_reportes_bucket = os.getenv('carpeta_reportes_bucket')
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -183,7 +184,7 @@ def procesar_y_subir():
         # st.empty_bucket_folder(bucket_name, carpeta_documentos_correcciones_bucket)
         # st.empty_bucket_folder(bucket_name, carpeta_documentos_elastic_bucket)
 
-        pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
+        pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_reportes_bucket)
         pe.particion_pdf(pdf_buffer, bucket_name,carpeta_pdfs_bucket)
 
         ''''

@@ -8,7 +8,7 @@ def initialize_storage_client():
     if not json_path:
         raise ValueError("La ruta del archivo JSON no está definida en el archivo .env")
     
-    client = storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra_2/quotes-381505-09ca05ec8b5e.json')
+    client = storage.Client.from_service_account_json(json_path)
     return client
 
 # Función para vaciar la carpeta de imagenes_subidas en lugar de todo el bucket

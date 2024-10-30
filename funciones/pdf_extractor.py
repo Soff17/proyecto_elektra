@@ -12,6 +12,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from openpyxl.styles import PatternFill
 from unidecode import unidecode
+from datetime import datetime
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -575,7 +576,7 @@ def ajustar_longitudes_listas():
     # Ajustar también la lista 'nueva_data_productos' para que coincida
     nueva_data_productos.extend([["", "", "", "", "", "", ""]] * (max_length - len(nueva_data_productos)))
 
-def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket):
+def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_reportes_bucket ):
     nueva_data_productos.clear()
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
@@ -724,7 +725,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
                 guardar_informacion_a_elasticsearch(f"{sku}", data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
                 
-    generar_reporte_excel_general()
+    generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket)
 
 def get_downloads_folder():
     # Obtener la carpeta de descargas según el sistema operativo
@@ -733,7 +734,7 @@ def get_downloads_folder():
     else:  # macOS y Linux
         return str(Path.home() / 'Downloads')
 
-def generar_reporte_excel_general():
+def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
     # Extraer SKU y URL directamente desde `nueva_data_productos`
     skus = [data[0].replace("Sku: ", "") for data in nueva_data_productos]
     urls = [data[-1].replace("Url: ", "") for data in nueva_data_productos]  # Asume que el último campo es la URL
@@ -854,3 +855,14 @@ def generar_reporte_excel_general():
     # Guardar el archivo Excel con todas las validaciones e imágenes insertadas
     workbook.save(nombre_archivo_excel)
     print(f"Reporte consolidado guardado en {nombre_archivo_excel}")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Subir el archivo Excel al bucket de Google Cloud Storage
+    with open(nombre_archivo_excel, "rb") as excel_file:
+        excel_buffer = io.BytesIO(excel_file.read())
+        excel_buffer.seek(0)  # Asegurarse de que el buffer esté al inicio
+
+        # Subida al storage con el nombre que incluye fecha y hora
+        #st.upload_text_buffer(bucket_name, carpeta_reportes_bucket, f"reporte_{timestamp}.xlsx", excel_buffer)
+        print(f"El reporte de Excel '{nombre_archivo_excel}' ha sido subido exitosamente al bucket '{bucket_name}/{carpeta_reportes_bucket}'.")
+
