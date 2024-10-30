@@ -21,6 +21,7 @@ carpeta_pdfs_bucket = os.getenv('carpeta_pdfs_bucket')
 carpeta_documentos_correcciones_bucket = os.getenv('carpeta_documentos_correcciones_bucket')
 carpeta_documentos_elastic_bucket = os.getenv('carpeta_documentos_elastic_bucket')
 documentos_dummy = './imagenes'
+INDICE = os.getenv('INDICE')
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -43,7 +44,7 @@ def eliminar_imagenes():
         resultados = []
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = [
-                executor.submit(lambda name: st.empty_bucket_folder(bucket_name, f"imagenes_prueba/{name}"), nombre)
+                executor.submit(lambda name: st.empty_bucket_folder(bucket_name, f"{carpeta_imagenes_bucket}/{name}"), nombre)
                 for nombre in imagenes_nombres
             ]
             for future, nombre in zip(futures, imagenes_nombres):
@@ -59,7 +60,7 @@ def eliminar_imagenes():
         return jsonify({"error": str(e)}), 500
 
 # Endpoint para subir imágenes desde una carpeta local a Google Cloud Storage
-@app.route('/subir_imagenes_carpeta', methods=['POST'])
+@app.route('/subir_imagenes', methods=['POST'])
 def subir_imagenes_carpeta():
     try:
         verificar_token()
@@ -69,7 +70,7 @@ def subir_imagenes_carpeta():
         if not folder_path:
             return jsonify({"error": "Falta el parámetro 'folder_path'"}), 400
 
-        st.upload_images_in_folder(bucket_name, folder_path, "imagenes_prueba")
+        st.upload_images_in_folder(bucket_name, folder_path, carpeta_imagenes_bucket)
 
         return jsonify({"mensaje": "Imágenes subidas correctamente"}), 200
 
@@ -81,10 +82,9 @@ def eliminar_documentos():
     try:
         verificar_token()
         data = request.get_json()
-        indice = data.get('indice')
         documento_ids = data.get('documento_ids')
 
-        if not indice:
+        if not INDICE:
             return jsonify({"error": "Falta el parámetro 'indice'"}), 400
         if not documento_ids:
             return jsonify({"error": "Falta el parámetro 'documento_ids'"}), 400
@@ -128,19 +128,18 @@ def subir_archivos():
         '''
 
         data = request.get_json()
-        indice = data.get('indice')
         carpeta = data.get('carpeta')  # Capturamos la carpeta desde el body de la solicitud
 
-        if not indice:
+        if not INDICE:
             return jsonify({"error": "Falta el parámetro 'indice'"}), 400
 
         if not carpeta:
             return jsonify({"error": "Falta el parámetro 'carpeta'"}), 400
 
         # Subir todos los archivos de la carpeta al índice especificado
-        es.subir_archivos_de_carpeta(indice, carpeta)
+        es.subir_archivos_de_carpeta(INDICE, carpeta)
 
-        return jsonify({"mensaje": f"Archivos subidos correctamente al índice {indice} desde la carpeta {carpeta}"}), 200
+        return jsonify({"mensaje": f"Archivos subidos correctamente al índice {INDICE} desde la carpeta {carpeta}"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
