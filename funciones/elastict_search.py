@@ -102,10 +102,26 @@ def verificar_y_limpiar_indice(es, index_name):
     else:
         print(f"El índice {index_name} no existe, procediendo a la carga de documentos.")
 
-# Función para subir un documento a Elasticsearch
 def indexar_documento(indice, id_documento, documento):
     try:
-        res = es.index(index=indice, id=id_documento, document=documento)
+        # Crear el objeto de embeddings
+        embeddings = ElasticsearchEmbeddings.from_es_connection(model_id, es)
+        
+        # Embeder el contenido del documento
+        document_embedding = embeddings.embed_documents([documento["contenido"]])
+        
+        # Preparar el documento con la estructura adecuada
+        doc_to_index = {
+            "text": documento["contenido"],
+            "vector": document_embedding[0],  # Suponiendo que se embebe un solo documento
+            "metadata": {
+                "title": documento.get("titulo", id_documento),  # Usa el título proporcionado o el ID como título
+                "upload-date": datetime.datetime.now().isoformat()  # O agrega la fecha de carga si es necesario
+            }
+        }
+
+        # Indexar el documento
+        res = es.index(index=indice, id=id_documento, body=doc_to_index)
         print(f"Documento {id_documento} indexado correctamente: {res['result']}")
         return res
     except Exception as e:

@@ -365,6 +365,7 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
     tasks.append(("storage", bucket_name, carpeta_documentos_elastic_bucket, f"{name_file}.txt", buffer))
 
     # Ejecutar las subidas en paralelo
+    # Ejecutar las subidas en paralelo
     with ThreadPoolExecutor() as executor:
         futures = []
         
