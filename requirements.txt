@@ -5,5 +5,10 @@ PyMuPDF
 python-dotenv
 fastapi
 uvicorn
+flask
 flask-cors
 google-cloud-storage
+elasticsearch
+pandas
+openpyxl
+unidecode
