@@ -98,7 +98,7 @@ def eliminar_documentos():
         for doc_id in documento_ids:
             try:
                 # Usar directamente el método delete de la instancia `es`
-                es.eliminar_documento("catalogo",doc_id )
+                es.eliminar_documento(INDICE,doc_id )
                 resultados.append({"documento_id": doc_id, "status": "eliminado"})
             except NotFoundError:
                 resultados.append({"documento_id": doc_id, "status": "Documento no encontrado"})
@@ -115,11 +115,11 @@ def eliminar_documentos():
 def subir_archivos():
     try:
         verificar_token()
-        # es.eliminar_documentos("catalogo")
+        #es.eliminar_documentos("elektra-docs")
         # Paso 2: Esperar a que el índice esté vacío
         ''''
         while True:
-            total_documentos = es.contar_documentos("catalogo")
+            total_documentos = es.contar_documentos("elektra-docs")
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados del índice. Comenzando la indexación.")
                 break
@@ -127,7 +127,6 @@ def subir_archivos():
                 print(f"Aún quedan {total_documentos} documentos en el índice. Esperando...")
                 time.sleep(5)  # Espera 5 segundos antes de volver a verificar
         '''
-
         data = request.get_json()
         carpeta = data.get('carpeta')  # Capturamos la carpeta desde el body de la solicitud
 
@@ -178,7 +177,7 @@ def procesar_y_subir():
 
         # Paso 3: Eliminar documentos
         # wd.eliminar_documentos()
-        # es.eliminar_documentos("catalogo")
+        # es.eliminar_documentos(INDICE)
 
         # Paso 4: Eliminar respaldos
         # st.empty_bucket_folder(bucket_name, carpeta_documentos_correcciones_bucket)
@@ -190,7 +189,7 @@ def procesar_y_subir():
         ''''
         # Paso 4: Esperar a que se hayan eliminado todos los documentos para subir los nuevos a discovery
         while True:
-            total_documentos = es.contar_documentos("catalogo")
+            total_documentos = es.contar_documentos(INDICE)
             if total_documentos == 0:
                 print("Todos los documentos han sido eliminados.")
                 pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
