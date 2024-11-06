@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from openpyxl.styles import PatternFill
 from unidecode import unidecode
 from datetime import datetime
+from PIL import Image
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -70,6 +71,7 @@ def extraer_informacion(page):
 
     # Determinar la categoría antes de procesar el resto de la información
     categoria = extraer_categoria(page)
+    nombre_producto_actual = ""  # Variable para capturar temporalmente el nombre del producto
 
     for block in blocks:
         if 'lines' in block:
@@ -80,39 +82,51 @@ def extraer_informacion(page):
                     text_flags = span['flags']
                     text_y_position = span['bbox'][1]
 
-                    # Get nombre de categoría
+                    # Detección de categoría
                     if nombre_de_categoria(text_size, text_flags) and not inicio_producto:
                         if not inicio_productos and len(titulos) > 0:
                             titulos[-1] += " " + text
                         else:
                             titulos.append(text)
 
-                    # Get nombre de producto
-                    # Get nombre de producto usando la nueva condición de la categoría
+                    # Acumulación del nombre de producto en múltiples líneas
                     elif nombre_del_producto(text_size, text_flags, categoria):
                         if inicio_producto:
-                            subtitulos[-1] += " " + text
+                            nombre_producto_actual += " " + text
                         else:
-                            subtitulos.append(text)
+                            nombre_producto_actual = text
                             inicio_producto = True
-                            datos = ''
                         inicio_productos = True
 
-                    # Get SKUs
+                    # Detección de SKU y consolidación del nombre de producto
                     elif sku_pattern.findall(text):
                         sku = sku_pattern.findall(text)[0].replace(".", "")
                         skus.append(sku)
-                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                        sku_positions.append((sku, text_y_position))
                         fin_producto = True
+
+                        # Asignar el nombre del producto acumulado a subtítulos si está disponible
+                        if nombre_producto_actual:
+                            subtitulos.append(nombre_producto_actual.strip())  # Limpiar cualquier espacio adicional
+                            nombre_producto_actual = ""  # Limpiar para el próximo producto
+                        else:
+                            subtitulos.append("Producto")
+                            precios.append("Pago de contado: NA")
 
                     elif sku_pattern_2.findall(text):
                         sku = sku_pattern_2.findall(text)[0].replace(".", "")
                         skus.append(sku)
-                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                        sku_positions.append((sku, text_y_position))
                         fin_producto = True
                         inicio_producto = True
-                        subtitulos.append("Producto")
-                        precios.append(f"Pago de contado: NA")
+                        
+                        # Consolidación para este caso de SKU alternativo
+                        if nombre_producto_actual:
+                            subtitulos.append(nombre_producto_actual.strip())
+                            nombre_producto_actual = ""
+                        else:
+                            subtitulos.append("Producto")
+                            precios.append("Pago de contado: NA")
 
                     elif sku_pattern_3.findall(text):
                         text = text.replace('Sku´s de referencia: ', '')
@@ -120,30 +134,31 @@ def extraer_informacion(page):
 
                         if skus_encontrados:
                             primer_sku = skus_encontrados[0]
-
-                            # Verificar si el primer SKU ya está en la lista de SKUs
                             if primer_sku in skus and len(skus_encontrados) > 1:
-                                # Si el primer SKU ya existe, combinarlo con el segundo SKU
                                 segundo_sku = skus_encontrados[1]
                                 sku_combination = f"{primer_sku} y {segundo_sku}"
                                 skus.append(sku_combination)
                                 sku_positions.append((sku_combination, text_y_position))
                             elif primer_sku not in skus:
-                                # Si el primer SKU no existe, agregarlo normalmente
                                 skus.append(primer_sku)
-                                sku_positions.append((primer_sku, text_y_position))  # Registrar posición del primer SKU
+                                sku_positions.append((primer_sku, text_y_position))
                             elif len(skus_encontrados) > 1:
-                                # Si el primer SKU ya existe y hay un segundo, usar el segundo SKU solo
                                 segundo_sku = skus_encontrados[1]
                                 skus.append(segundo_sku)
-                                sku_positions.append((segundo_sku, text_y_position))  # Registrar posición del segundo SKU
+                                sku_positions.append((segundo_sku, text_y_position))
 
                         fin_producto = True
                         inicio_producto = True
-                        subtitulos.append("Producto")
-                        precios.append(f"Pago de contado: NA")
+                        
+                        # Consolidación del nombre del producto acumulado
+                        if nombre_producto_actual:
+                            subtitulos.append(nombre_producto_actual.strip())
+                            nombre_producto_actual = ""
+                        else:
+                            subtitulos.append("Producto")
+                            precios.append("Pago de contado: NA")
 
-                    # Get Vigencias
+                    # Captura de vigencia
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
                         vigencias.append(text)
                         info.append(datos)
@@ -151,32 +166,16 @@ def extraer_informacion(page):
                         fin_producto = False
                         inicio_producto = False
 
-                    # Delete info extra
+                    # Eliminar información extra
                     elif delete_pattern.findall(text) or delete_pattern2.findall(text):
                         continue
                     
-                    # Get Precio precio_del_producto(text_size, text_flags)
+                    # Captura de precios
                     elif precio_pattern3.findall(text):
-                        precio = precio_pattern3.findall(text)[0]  # Capturar el precio completo
+                        precio = precio_pattern3.findall(text)[0]
                         precios.append(f"Pago de contado: {precio}")
 
-                        # Get el cupon
-                        '''''
-                        elif bono_pattern.findall(text):
-                            cupones.append(text)
-
-                        elif bono_pattern2.findall(text) and len(cupones) > 0:
-                            texto_original = cupones[-1] + " " + text
-                            texto_sin_espacios = re.sub(r'\s(?=[A-Za-z0-9])', '', texto_original)
-                            texto_intermedio = re.sub(r'\s+\$', ' $', texto_sin_espacios)
-                            texto_corregido = re.sub(r'RegaloDe', 'Regalo de', texto_intermedio, flags=re.IGNORECASE)
-                            texto_sin_caracteres_especiales = re.sub(r'[!¡*]', '', texto_corregido).strip()
-                            texto_final = texto_sin_caracteres_especiales.lower()
-                            texto_final = 'Bono' + texto_final[4:]
-
-                            cupones[-1] = texto_final
-                        '''
-                    # Get Info producto
+                    # Captura de información del producto
                     else:
                         if datos == '':
                             datos = text
@@ -185,6 +184,16 @@ def extraer_informacion(page):
 
     return sku_positions  # Devolver las posiciones de los SKUs para asignar imágenes
 
+
+
+def convertir_a_jpeg(imagen_bytes):
+    with Image.open(io.BytesIO(imagen_bytes)) as img:
+        img_rgb = img.convert('RGB')  # Convertir a RGB si es necesario
+        buffer = io.BytesIO()
+        img_rgb.save(buffer, format="JPEG")  # Guardar como JPEG
+        buffer.seek(0)
+        return buffer.getvalue()  # Devolver bytes de la imagen en JPEG
+    
 def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions):
     images = page.get_image_info(hashes=True, xrefs=True)
     imagenes = []
@@ -207,6 +216,10 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         base_image = doc.extract_image(xref)
         image_bytes = base_image["image"]
         ext = base_image["ext"]
+
+        if ext != "jpeg":
+            # Convertir a JPEG si la extensión no es "jpeg"
+            image_bytes = convertir_a_jpeg(image_bytes)
 
         # Encontrar el SKU más cercano basado en la posición Y
         closest_sku = find_closest_sku(sku_positions, bbox[3])
@@ -596,7 +609,8 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         sku_positions = extraer_informacion(page)
 
         if len(titulos) == 0 or len(info) == 0:
-            break
+            print(f"No se encontró información en la página {page_num + 1}. Continuando con la siguiente página.")
+            continue
 
         get_urls(page)
 
@@ -684,20 +698,27 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 content = f"{datos_producto}"
 
                 # Patrón para el formato de pago semanal
+                # Limpia el texto eliminando la frase '¡ B O C I N A  D E  R E G A L O !'
+                datos_producto = datos_producto.replace("¡ B O C I N A  D E  R E G A L O !", "").strip()
+                datos_producto = datos_producto.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
+
+                # Patrón para el formato de pago semanal
                 pago_semanal_pattern = re.compile(r'(\$?\d+)\s*x\s*(\d+)\s*semanas\s*(\$\d{1,3}(?:,\d{3})*)\s*de\s*pago\s*inicial\s*(\d+)(.*)')
-            
-                # Buscar y reemplazar el formato de pago semanal
+
+                # Aplicar el patrón y verificar coincidencia en el texto limpio
                 match = pago_semanal_pattern.search(datos_producto)
                 if match:
-                    cantidad4 = match.group(4)  # Se usa cantidad4 en lugar de cantidad1
-                    semanas = match.group(2)
-                    pago_inicial = match.group(3)
-                    texto_adicional = match.group(5).strip()
+                    # Extraer los valores según el patrón
+                    cantidad4 = match.group(4)  # Monto de pago semanal
+                    semanas = match.group(2)     # Número de semanas
+                    pago_inicial = match.group(3)  # Pago inicial
+                    texto_adicional = match.group(5).strip()  # Cualquier texto adicional
 
-                    # Verificar si el texto adicional contiene "Descuento"
+                    # Verificar si hay un descuento en el texto adicional y formatear el mensaje
                     if 'Descuento' in texto_adicional or 'descuento' in texto_adicional:
                         texto_adicional = f"\nDescuento: {texto_adicional}"
 
+                    # Formatear el texto final con el patrón deseado
                     nuevo_texto = f"${cantidad4} x {semanas} semanas {pago_inicial} de pago inicial"
                     datos_producto = datos_producto.replace(match.group(0), nuevo_texto + texto_adicional)
                     content = f"Pago semanal: {datos_producto}"
@@ -711,6 +732,10 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 elif re.search(r'pago inicial \d+', datos_producto):
                     datos_producto = re.sub(r'(pago inicial \d+)', r'\1\nDescuento:', datos_producto)
                     content = f"Pago semanal: {datos_producto}"
+                
+                subtitulo = re.sub(r"¡ B O C I N A  D E  R E G A L O !.*", "", subtitulo).strip()
+                subtitulo = subtitulo.replace("S E G U N D A  P I E Z A H A S T A  - 7 0 %  E N  A B O N O %", "").strip()
+                subtitulo = subtitulo.replace("S E G U N D A  P I E Z A H A S T A  - 6 0 %  E N  A B O N O %", "").strip()
             
             # Restante de las asignaciones
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
