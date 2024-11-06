@@ -360,9 +360,25 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
     url = data[-1].replace("Url: ", "")
     imagen_existe = tiene_imagen(sku)
     subtitulo = data[2]
+    categoria = data[1].lower()
 
-    # Si la URL no coincide con el SKU o no existe la imagen, guardar en 'correcciones' en lugar de subir a Elasticsearch
-    if sku not in url or not imagen_existe or subtitulo.startswith("Producto: Promoción"):
+    # Definir la estructura requerida
+    estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:", "Url:"]
+
+    # Verificar si el producto cumple con la estructura requerida
+    def cumple_estructura(data):
+        for campo in estructura_requerida:
+            if not any(campo in item for item in data):
+                return False
+        return True
+
+    # Validaciones para enviar a correcciones
+    if (
+        sku not in url or 
+        not imagen_existe or 
+        subtitulo.startswith("Producto: Promoción") or 
+        (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria)
+    ):
         guardar_en_correcciones(name_file, contenido_txt, bucket_name, carpeta_documentos_correcciones_bucket)
         print(f"'{name_file}.txt' guardado en 'correcciones' debido a validación fallida.")
         return
@@ -393,7 +409,6 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
     buffer.seek(0)  # Asegurarse de que el buffer esté al inicio
     tasks.append(("storage", bucket_name, carpeta_documentos_elastic_bucket, f"{name_file}.txt", buffer))
 
-    # Ejecutar las subidas en paralelo
     # Ejecutar las subidas en paralelo
     with ThreadPoolExecutor() as executor:
         futures = []
@@ -862,6 +877,7 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
         for cell in row:
             if cell.value == False:
                 cell.fill = red_fill
+
     # Marcar los SKUs duplicados en color naranja
     orange_fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")
 
@@ -876,15 +892,23 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
             cell.fill = orange_fill
     
     # Marcar en amarillo las celdas de "Nueva Data Producto" si el subtítulo comienza con "Producto: Promoción"
+    # o si no cumplen con la estructura y no son de la categoría "equipos" o "planes"
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    col_nueva_data = 3  # Columna "Nueva Data Producto" (ajustar si está en otro índice)
+    estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:", "Url:"]
+    
+    def cumple_estructura(data):
+        for campo in estructura_requerida:
+            if not any(campo in item for item in data):
+                return False
+        return True
 
     for index, data in enumerate(nueva_data_productos, start=2):  # Comienza en la fila 2
         subtitulo = data[2]  # Índice del subtítulo en `nueva_data_productos`
-        if subtitulo.startswith("Producto: Promoción"):
+        categoria = data[1].lower()
+        
+        if subtitulo.startswith("Producto: Promoción") or (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria):
             cell = sheet.cell(row=index, column=col_nueva_data)
             cell.fill = yellow_fill
-
 
     # Guardar el archivo Excel con todas las validaciones e imágenes insertadas
     workbook.save(nombre_archivo_excel)
