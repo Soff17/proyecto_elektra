@@ -736,10 +736,19 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 subtitulo = re.sub(r"¡ B O C I N A  D E  R E G A L O !.*", "", subtitulo).strip()
                 subtitulo = subtitulo.replace("S E G U N D A  P I E Z A H A S T A  - 7 0 %  E N  A B O N O %", "").strip()
                 subtitulo = subtitulo.replace("S E G U N D A  P I E Z A H A S T A  - 6 0 %  E N  A B O N O %", "").strip()
-            
+                # Expresión regular para eliminar "¡ B O N O  D E  R E G A L O  D E  1 , 0 0 0 * !" y todo lo que sigue
+                subtitulo = re.sub(r"¡\s*B\s*O\s*N\s*O\s*D\s*E\s*R\s*E\s*G\s*A\s*L\s*O\s*D\s*E\s*1\s*,\s*0\s*0\s*0\s*\*\s*!.*", "", subtitulo).strip()
+
             # Restante de las asignaciones
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip()}" if titulos else ""
+            categoria = categoria.replace("Paquete", "").strip()
+            if categoria == 'Categoria: Planes':
+                # Extrae el valor correcto para el pago semanal
+                content = re.sub(r'\$\d+\s*(\d+\s*\$\s*semanales)', r'Pago: \1', content)
+
+                # Asegúrate de que "Incluye:" esté en una nueva línea, en caso de estar seguido
+                content = re.sub(r'(?<=semanales)\s*Incluye:', r'\nIncluye:', content)
             #cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
 
             if sku:
