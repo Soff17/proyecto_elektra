@@ -45,6 +45,23 @@ data_reporte = {
     'URL': []
 }
 
+def elimanr_ultimas_paginas(pdf, output_path):
+    doc = fitz.open(pdf)
+
+    number_of_pages = doc.page_count
+
+    page_to_delete = [number_of_pages - 1, number_of_pages - 2, number_of_pages - 3]
+
+    page_to_delete.sort(reverse=True)
+
+    for page in page_to_delete:
+        doc.delete_page(page)
+
+    # El output path tiene que ser el nombre del archvio
+    # Ejemplo: ./pdf_buffer.pdf
+    doc.save(output_path)
+    doc.close
+
 def nombre_de_categoria(font_size, font_flags):
     if (font_size > 43) and font_flags == 20:
         return True
@@ -515,6 +532,7 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
 def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
+    buffer_categoria = ""
     
     # Obtener la carpeta de descargas del usuario
     downloads_folder = get_downloads_folder()
@@ -541,6 +559,10 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
         
         # Guardar localmente en la carpeta 'pdfs_finales'
         ruta_local_pdf = os.path.join(ruta_pdfs_finales, nombre_archivo_pdf)
+
+        print(ruta_local_pdf)
+
+        # Guardar el PDF de una página en la ruta local
         doc_pagina.save(ruta_local_pdf)
         print(f"Página {num_page + 1} guardada como {ruta_local_pdf}")
         
@@ -554,8 +576,12 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
         print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
         doc_pagina.close()
+        if nombre_categoria_sanitizado == "nombre_temporal":
+            join_pdfs(os.path.join(ruta_pdfs_finales, f"{buffer_categoria}.pdf"), ruta_local_pdf)
+        buffer_categoria = nombre_categoria_sanitizado
 
     doc.close()
+
 
 def extraer_categoria(page):
     # Lógica para extraer el nombre de la categoría desde la página
@@ -574,11 +600,29 @@ def extraer_categoria(page):
                         return text
     return "Categoria_Desconocida"
 
+def join_pdfs(first_pdf_path, second_pdf_path):
+    doc1 = fitz.open(first_pdf_path)
+    doc2 = fitz.open(second_pdf_path)
+
+    # Insertar el contenido del segundo documento en el primero
+    doc1.insert_pdf(doc2)
+
+    # Guardar los cambios en un archivo temporal primero
+    temp_path = "temp_file.pdf"
+    doc1.save(temp_path, incremental=False)  # Guardar sin modo incremental
+    doc1.close()
+    doc2.close()
+    os.remove(second_pdf_path)
+
+    # Mover el archivo temporal al archivo original, sobrescribiéndolo
+    os.replace(temp_path, first_pdf_path)
+    print(f"El PDF combinado ha sido guardado sobre: {first_pdf_path}")
+
 def sanitizar_nombre_categoria(categoria):
     # Reemplazar solo los caracteres no válidos, mantener los espacios y convertirlos a guiones bajos
     categoria_sanitizada = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', categoria).strip()
+
     nombre_con_guiones_bajos = unidecode(categoria_sanitizada).replace(" ", "_")
-    
     # Si hay varios guiones bajos, cortar en el primer guión bajo
     nombre_final = nombre_con_guiones_bajos.split('_')[0]
     
@@ -587,6 +631,8 @@ def sanitizar_nombre_categoria(categoria):
         nombre_final = "Home_Audio"
     elif nombre_final == "Linea":
         nombre_final = "Linea_Blanca"
+    elif not nombre_final:
+        return "nombre_temporal"
     
     return nombre_final
 
@@ -783,13 +829,17 @@ def get_downloads_folder():
     else:  # macOS y Linux
         return str(Path.home() / 'Downloads')
 
+def limpiar_caracteres_especiales(texto):
+    # Eliminar caracteres no imprimibles excepto saltos de línea, caracteres acentuados, $, %, /, comillas dobles y comillas dobles de cierre
+    return re.sub(r'[^a-zA-Z0-9áéíóúÁÉÍÓÚüÜñÑ.,;:!?()\[\]{}<>\-\n $%/""”]+', '', texto)
+
 def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
     # Extraer SKU y URL directamente desde `nueva_data_productos`
     skus = [data[0].replace("Sku: ", "") for data in nueva_data_productos]
     urls = [data[-1].replace("Url: ", "") for data in nueva_data_productos]  # Asume que el último campo es la URL
 
     # Crear la data en un DataFrame para todas las categorías en `nueva_data_productos`
-    nueva_data_formateada = ['\n'.join(data) for data in nueva_data_productos]
+    nueva_data_formateada = [limpiar_caracteres_especiales('\n'.join(data)) for data in nueva_data_productos]
     df = pd.DataFrame({
         'SKU': skus,  
         'URL': urls,  
