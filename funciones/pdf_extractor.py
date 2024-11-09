@@ -583,6 +583,9 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
     doc.close()
 
 
+# Lista global para almacenar las categorías extraídas
+categorias_extraidas = []
+
 def extraer_categoria(page):
     # Lógica para extraer el nombre de la categoría desde la página
     blocks = page.get_text("dict", sort=True)["blocks"]
@@ -597,8 +600,11 @@ def extraer_categoria(page):
 
                     # Verificar si el texto coincide con el nombre de la categoría
                     if nombre_de_categoria(text_size, text_flags):
+                        # Añadir la categoría detectada a la lista
+                        categorias_extraidas.append(text)
                         return text
     return "Categoria_Desconocida"
+
 
 def join_pdfs(first_pdf_path, second_pdf_path):
     doc1 = fitz.open(first_pdf_path)
@@ -650,6 +656,8 @@ def ajustar_longitudes_listas():
     # Ajustar también la lista 'nueva_data_productos' para que coincida
     nueva_data_productos.extend([["", "", "", "", "", "", ""]] * (max_length - len(nueva_data_productos)))
 
+ultima_categoria = "Categoria: null" 
+
 def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_reportes_bucket ):
     nueva_data_productos.clear()
     # Abre el PDF desde el buffer en memoria
@@ -684,6 +692,9 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             datos_producto = info[i] if i < len(info) else ""
             subtitulo = subtitulo.replace('con hasta', '')
+
+            #if titulos[0] == "50%":
+                #titulos[0] = "Línea Blanca"
 
             if titulos[0] == "Planes":
                 subtitulo = re.sub(r'^.*?Llévate un', '', subtitulo).strip()
@@ -803,6 +814,11 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             # Restante de las asignaciones
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip()}" if titulos else ""
+            if categoria == "Categoria: ":
+                categoria = ultima_categoria  # Usar la última categoría válida
+            else:
+                ultima_categoria = categoria
+
             categoria = categoria.replace("Paquete", "").strip()
             if categoria == 'Categoria: Planes':
                 # Extrae el valor correcto para el pago semanal
@@ -819,7 +835,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 nueva_data_productos.append([sku_num, categoria, subtitulo, content, vigencia, url_line])
                 #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
                 guardar_informacion_a_elasticsearch(f"{sku}", data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
-                
+    print(categorias_extraidas)
     generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket)
 
 def get_downloads_folder():
