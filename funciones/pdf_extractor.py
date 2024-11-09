@@ -377,7 +377,7 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
     url = data[-1].replace("Url: ", "")
     imagen_existe = tiene_imagen(sku)
     subtitulo = data[2]
-    categoria = data[1].lower()
+    categoria = data[1].replace("Categoria:", "").strip().lower()  # Remover "Categoria:" y espacios en blanco
 
     # Definir la estructura requerida
     estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:", "Url:"]
@@ -394,7 +394,8 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
         sku not in url or 
         not imagen_existe or 
         subtitulo.startswith("Producto: Promoción") or 
-        (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria)
+        (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria) or 
+        not categoria  # Validar si la categoría está vacía después de quitar espacios
     ):
         guardar_en_correcciones(name_file, contenido_txt, bucket_name, carpeta_documentos_correcciones_bucket)
         print(f"'{name_file}.txt' guardado en 'correcciones' debido a validación fallida.")
@@ -433,11 +434,9 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
         for task in tasks:
             if task[0] == "elasticsearch":
                 documento, name_file = task[1], task[2]
-                #futures.append(executor.submit(es.indexar_documento, "catalogo", name_file, documento))
                 futures.append(executor.submit("catalogo", name_file, documento))
             elif task[0] == "storage":
                 _, bucket, folder, filename, buffer = task
-                #futures.append(executor.submit(st.upload_text_buffer, bucket, folder, filename, buffer))
                 futures.append(executor.submit(bucket, folder, filename, buffer))
 
         # Verificar y manejar posibles errores en las subidas
@@ -448,6 +447,7 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
                 print(f"Error al subir documento: {e}")
 
     print(f'Se subió "{name_file}.txt" a Elasticsearch y almacenamiento exitosamente.')
+
 
 def tiene_imagen(sku):
     # Verifica si existe una imagen para el SKU
@@ -954,10 +954,13 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
 
     for index, data in enumerate(nueva_data_productos, start=2):  # Comienza en la fila 2
         subtitulo = data[2]  # Índice del subtítulo en `nueva_data_productos`
-        categoria = data[1].lower()
+        categoria = data[1].replace("Categoria:", "").strip().lower()  # Remover etiqueta y espacios en blanco
         
-        if subtitulo.startswith("Producto: Promoción") or (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria):
-            cell = sheet.cell(row=index, column=col_nueva_data)
+        # Verificar si la categoría está vacía o si no cumple con la estructura
+        if not categoria or subtitulo.startswith("Producto: Promoción") or (
+            not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria
+        ):
+            cell = sheet.cell(row=index, column=3)  # Columna "Nueva Data Producto"
             cell.fill = yellow_fill
 
     # Guardar el archivo Excel con todas las validaciones e imágenes insertadas
