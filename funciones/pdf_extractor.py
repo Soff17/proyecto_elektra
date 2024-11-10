@@ -773,6 +773,8 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 # Limpia el texto eliminando la frase '¡ B O C I N A  D E  R E G A L O !'
                 datos_producto = datos_producto.replace("¡ B O C I N A  D E  R E G A L O !", "").strip()
                 datos_producto = datos_producto.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
+                datos_producto = datos_producto.strip().replace("L L É V A T E  B O C I N A D E  R E G A L O !", "").strip()
+
 
                 # Patrón para el formato de pago semanal
                 pago_semanal_pattern = re.compile(r'(\$?\d+)\s*x\s*(\d+)\s*semanas\s*(\$\d{1,3}(?:,\d{3})*)\s*de\s*pago\s*inicial\s*(\d+)(.*)')
@@ -846,8 +848,8 @@ def get_downloads_folder():
         return str(Path.home() / 'Downloads')
 
 def limpiar_caracteres_especiales(texto):
-    # Eliminar caracteres no imprimibles excepto saltos de línea, caracteres acentuados, $, %, /, comillas dobles y comillas dobles de cierre
-    return re.sub(r'[^a-zA-Z0-9áéíóúÁÉÍÓÚüÜñÑ.,;:!?()\[\]{}<>\-\n $%/""”]+', '', texto)
+    # Eliminar caracteres no imprimibles excepto saltos de línea, caracteres acentuados, $, %, /, comillas dobles, comillas dobles de cierre y el símbolo +
+    return re.sub(r'[^a-zA-Z0-9áéíóúÁÉÍÓÚüÜñÑ.,;:!?()\[\]{}<>\-\n $%/""”+]+', '', texto)
 
 def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
     # Extraer SKU y URL directamente desde `nueva_data_productos`
