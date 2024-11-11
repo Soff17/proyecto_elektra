@@ -765,6 +765,13 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                     datos_producto = datos_producto.replace('descuento', 'descuento\nPago de contado:')
                 if 'abono semanal' in datos_producto or 'Abono semanal' in datos_producto:
                     datos_producto = datos_producto.replace('abono semanal', 'abono semanal\nPago de contado:')
+                
+                if titulos[0] == "Cómputo":
+                    datos_producto = re.sub(r"\s?L L É V A T E  B O C I N A D E  R E G A L O !\s?", "", datos_producto).strip()
+                    datos_producto = datos_producto.replace("¡", "").replace("!", "").strip()
+                    datos_producto = datos_producto.replace("¡ B O C I N A  D E  R E G A L O !", "").strip()
+                    datos_producto = datos_producto.replace("B O C I N A  D E  R E G A L O", "").strip()
+                    datos_producto = datos_producto.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
 
                 # Asignar el contenido modificado
                 content = f"{datos_producto}"
@@ -773,8 +780,6 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 # Limpia el texto eliminando la frase '¡ B O C I N A  D E  R E G A L O !'
                 datos_producto = datos_producto.replace("¡ B O C I N A  D E  R E G A L O !", "").strip()
                 datos_producto = datos_producto.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
-                datos_producto = datos_producto.strip().replace("L L É V A T E  B O C I N A D E  R E G A L O !", "").strip()
-
 
                 # Patrón para el formato de pago semanal
                 pago_semanal_pattern = re.compile(r'(\$?\d+)\s*x\s*(\d+)\s*semanas\s*(\$\d{1,3}(?:,\d{3})*)\s*de\s*pago\s*inicial\s*(\d+)(.*)')
