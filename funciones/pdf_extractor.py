@@ -380,7 +380,7 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
     categoria = data[1].replace("Categoria:", "").strip().lower()  # Remover "Categoria:" y espacios en blanco
 
     # Definir la estructura requerida
-    estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:", "Url:"]
+    estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:"]
 
     # Verificar si el producto cumple con la estructura requerida
     def cumple_estructura(data):
@@ -391,7 +391,7 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
 
     # Validaciones para enviar a correcciones
     if (
-        sku not in url or 
+        #sku not in url or 
         not imagen_existe or 
         subtitulo.startswith("Producto: Promoción") or 
         (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria) or 
@@ -848,9 +848,9 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
 
             if sku:
                 sku_num = "Sku: " + sku
-                url_line = f"Url: {url}"
-                data = [sku_num, categoria, subtitulo, content, vigencia, url_line]
-                nueva_data_productos.append([sku_num, categoria, subtitulo, content, vigencia, url_line])
+                #url_line = f"Url: {url}"
+                data = [sku_num, categoria, subtitulo, content, vigencia]
+                nueva_data_productos.append([sku_num, categoria, subtitulo, content, vigencia])
                 #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
                 guardar_informacion_a_elasticsearch(f"{sku}", data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
     print(categorias_extraidas)
@@ -885,7 +885,7 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
     df['URL'] = df['URL'].astype(str).str.strip()
 
     # Crear una columna para verificar si el SKU está contenido en la URL
-    df['URL Coincide con SKU'] = [sku in url for sku, url in zip(df['SKU'], df['URL'])]
+    #df['URL Coincide con SKU'] = [sku in url for sku, url in zip(df['SKU'], df['URL'])]
 
     # Añadir una columna que indique si el SKU tiene una imagen asociada
     def tiene_imagen(sku):
@@ -950,11 +950,12 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
     # Aplicar formato condicional para resaltar en rojo las celdas con "False" en las columnas "URL Coincide con SKU" y "Tiene Imagen"
     red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
 
-    # Columna "URL Coincide con SKU"
-    for row in sheet.iter_rows(min_row=2, min_col=col_url_coincide, max_col=col_url_coincide, max_row=sheet.max_row):
-        for cell in row:
-            if cell.value == False:
-                cell.fill = red_fill
+    # Aplicar formato condicional para resaltar en rojo las celdas con "False" en las columnas "URL Coincide con SKU" y "Tiene Imagen"
+    # Comentado: Columna "URL Coincide con SKU"
+    # for row in sheet.iter_rows(min_row=2, min_col=col_url_coincide, max_col=col_url_coincide, max_row=sheet.max_row):
+    #     for cell in row:
+    #         if cell.value == False:
+    #             cell.fill = red_fill
 
     # Columna "Tiene Imagen"
     for row in sheet.iter_rows(min_row=2, min_col=col_tiene_imagen, max_col=col_tiene_imagen, max_row=sheet.max_row):
@@ -978,7 +979,7 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
     # Marcar en amarillo las celdas de "Nueva Data Producto" si el subtítulo comienza con "Producto: Promoción"
     # o si no cumplen con la estructura y no son de la categoría "equipos" o "planes"
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:", "Url:"]
+    estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:"]
     
     def cumple_estructura(data):
         for campo in estructura_requerida:
