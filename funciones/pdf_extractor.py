@@ -775,6 +775,17 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
 
                 # Asignar el contenido modificado
                 content = f"{datos_producto}"
+                if titulos[0] == "Equipos":
+                    datos_producto = re.sub(
+                        r"(\$\d{1,3}(?:,\d{3})*)\s+(\$\d{1,3}(?:,\d{3})*)\s+\+\s+semanales",
+                        r"\1 + \2 semanales",
+                        datos_producto
+                    )
+                    datos_producto = re.sub(
+                        r"\$(\d+)\s+\+\s+semanales te llevas un accesorio o un cargador\s+\$(\d{1,3}(?:,\d{3})*)",
+                        r"$\2 + $\1 semanales te llevas un accesorio o un cargador",
+                        datos_producto
+                    )
 
                 # Patrón para el formato de pago semanal
                 # Limpia el texto eliminando la frase '¡ B O C I N A  D E  R E G A L O !'
