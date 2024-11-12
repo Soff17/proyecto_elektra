@@ -382,6 +382,13 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
     # Definir la estructura requerida
     estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:"]
 
+    # Expresión regular para validar el formato de "Pago semanal"
+    # Expresión regular para validar el formato de "Pago semanal"
+    pago_semanal_pattern = re.compile(
+        r'Pago semanal: \$?\d+ x \d+ semanas \$?\d+(,\d{3})* de pago inicial|Pago semanal: \d+ \$ x \d+ semanas con \d+% de enganche'
+    )
+
+
     # Verificar si el producto cumple con la estructura requerida
     def cumple_estructura(data):
         for campo in estructura_requerida:
@@ -391,15 +398,16 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
 
     # Validaciones para enviar a correcciones
     if (
-        #sku not in url or 
         not imagen_existe or 
         subtitulo.startswith("Producto: Promoción") or 
         (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria) or 
-        not categoria  # Validar si la categoría está vacía después de quitar espacios
+        not categoria or  # Validar si la categoría está vacía después de quitar espacios
+        (categoria != "planes" and not any(pago_semanal_pattern.match(line) for line in data))  # Validar estructura de "Pago semanal" si no es "planes"
     ):
         guardar_en_correcciones(name_file, contenido_txt, bucket_name, carpeta_documentos_correcciones_bucket)
         print(f"'{name_file}.txt' guardado en 'correcciones' debido a validación fallida.")
         return
+
 
     # Crear una lista de tareas para ejecutar en paralelo
     tasks = []
@@ -447,6 +455,7 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
                 print(f"Error al subir documento: {e}")
 
     print(f'Se subió "{name_file}.txt" a Elasticsearch y almacenamiento exitosamente.')
+
 
 
 def tiene_imagen(sku):
@@ -772,10 +781,17 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                     datos_producto = datos_producto.replace("¡ B O C I N A  D E  R E G A L O !", "").strip()
                     datos_producto = datos_producto.replace("B O C I N A  D E  R E G A L O", "").strip()
                     datos_producto = datos_producto.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
+                    subtitulo = subtitulo.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
+                    subtitulo = subtitulo.replace("L L É V A T E  B O C I N A", "").strip()
 
                 # Asignar el contenido modificado
                 content = f"{datos_producto}"
                 if titulos[0] == "Equipos":
+                    # Eliminar bonos de regalo transversales del campo "Pago semanal"
+                    datos_producto = re.sub(r'Bono de regalo transversal.*?\.', '', datos_producto).strip()
+                    datos_producto = re.sub(r'\$1,000\.', '', datos_producto).strip()
+
+                    # Ajuste del campo "Pago semanal" para asegurar el formato correcto
                     datos_producto = re.sub(
                         r"(\$\d{1,3}(?:,\d{3})*)\s+(\$\d{1,3}(?:,\d{3})*)\s+\+\s+semanales",
                         r"\1 + \2 semanales",
@@ -788,7 +804,6 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                     )
 
                 # Patrón para el formato de pago semanal
-                # Limpia el texto eliminando la frase '¡ B O C I N A  D E  R E G A L O !'
                 datos_producto = datos_producto.replace("¡ B O C I N A  D E  R E G A L O !", "").strip()
                 datos_producto = datos_producto.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
 
@@ -828,6 +843,22 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 subtitulo = subtitulo.replace("S E G U N D A  P I E Z A H A S T A  - 6 0 %  E N  A B O N O %", "").strip()
                 # Expresión regular para eliminar "¡ B O N O  D E  R E G A L O  D E  1 , 0 0 0 * !" y todo lo que sigue
                 subtitulo = re.sub(r"¡\s*B\s*O\s*N\s*O\s*D\s*E\s*R\s*E\s*G\s*A\s*L\s*O\s*D\s*E\s*1\s*,\s*0\s*0\s*0\s*\*\s*!.*", "", subtitulo).strip()
+
+                if titulos[0] == "Equipos":
+                    subtitulo = subtitulo.replace("L L É V A T E  X I A O M I  R E D M I  A 3 D E  R E G A L O !", "").strip()
+                    # Extraer características del producto como '* Cámara 12+12 Mpx Memoria: 128 GB'
+                    caracteristicas_pattern = re.compile(r'\* Cámara\s+\d+\+\d+(?:\+\d+)?\s+Mpx\s+Memoria:\s+\d+\s+GB')
+                    caracteristicas = caracteristicas_pattern.search(datos_producto)
+                    
+                    if caracteristicas:
+                        caracteristicas_texto = caracteristicas.group(0)
+                        # Eliminar las características del campo "Pago semanal"
+                        datos_producto = datos_producto.replace(caracteristicas_texto, '').strip()
+                        # Agregar las características al nombre del producto
+                        subtitulo = f"{subtitulo} {caracteristicas_texto}"
+                        subtitulo = subtitulo.replace("*", "").strip()
+                        
+                    content = f"Pago semanal: {datos_producto}"
 
             # Restante de las asignaciones
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
@@ -986,6 +1017,11 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
             if not any(campo in item for item in data):
                 return False
         return True
+    
+    # Define pattern for "Pago semanal"
+    pago_semanal_pattern = re.compile(
+        r'Pago semanal: \$?\d+ x \d+ semanas \$?\d+(,\d{3})* de pago inicial|Pago semanal: \d+ \$ x \d+ semanas con \d+% de enganche'
+    )
 
     for index, data in enumerate(nueva_data_productos, start=2):  # Comienza en la fila 2
         subtitulo = data[2]  # Índice del subtítulo en `nueva_data_productos`
@@ -994,7 +1030,7 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
         # Verificar si la categoría está vacía o si no cumple con la estructura
         if not categoria or subtitulo.startswith("Producto: Promoción") or (
             not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria
-        ):
+        ) or (categoria != "planes" and not any(pago_semanal_pattern.search(line) for line in data)):
             cell = sheet.cell(row=index, column=3)  # Columna "Nueva Data Producto"
             cell.fill = yellow_fill
 
