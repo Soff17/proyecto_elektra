@@ -29,6 +29,28 @@ carpeta_reportes_bucket = os.getenv('carpeta_reportes_bucket')
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Endpoint para eliminar todo el contenido de una carpeta en el bucket (sin eliminar la carpeta)
+@app.route('/vaciar_carpeta', methods=['DELETE'])
+def vaciar_carpeta():
+    try:
+        # Verificar el token antes de proceder
+        verificar_token()
+
+        # Obtener el nombre de la carpeta del cuerpo de la solicitud
+        data = request.get_json()
+        bucket_folder = data.get('bucket_folder')
+
+        if not bucket_folder:
+            return jsonify({"error": "Falta el parámetro 'bucket_folder'"}), 400
+
+        # Llamar a la función para vaciar la carpeta
+        st.empty_bucket_folder(bucket_name, bucket_folder)
+
+        return jsonify({"message": f"Todo el contenido de la carpeta '{bucket_folder}' fue eliminado exitosamente."}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 # Endpoint para descargar una lista de archivos desde carpeta_documentos_elastic_bucket y guardarlos en una carpeta local
 @app.route('/descargar_elastic_documentos', methods=['POST'])
 def descargar_elastic_documentos():
