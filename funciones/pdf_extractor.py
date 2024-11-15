@@ -544,6 +544,20 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
     buffer_categoria = ""
+    # Eliminar hipervínculos de todas las páginas
+    for page_num in range(doc.page_count):
+        page = doc[page_num]
+        links = page.get_links()
+        for link in links:
+            page.delete_link(link)  # Elimina cada hipervínculo encontrado en la página
+    
+    # Guardar el PDF sin hipervínculos en un buffer temporal
+    cleaned_pdf_buffer = io.BytesIO()
+    doc.save(cleaned_pdf_buffer)
+    cleaned_pdf_buffer.seek(0)
+
+    # Volver a abrir el PDF limpio para particionar
+    doc = fitz.open(stream=cleaned_pdf_buffer, filetype="pdf")
     
     # Obtener la carpeta de descargas del usuario
     downloads_folder = get_downloads_folder()
@@ -673,6 +687,21 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
     nueva_data_productos.clear()
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
+
+    # Eliminar hipervínculos de todas las páginas
+    for page_num in range(doc.page_count):
+        page = doc[page_num]
+        links = page.get_links()
+        for link in links:
+            page.delete_link(link)  # Elimina cada hipervínculo encontrado en la página
+    
+    # Guardar el PDF sin hipervínculos en un buffer temporal
+    cleaned_pdf_buffer = io.BytesIO()
+    doc.save(cleaned_pdf_buffer)
+    cleaned_pdf_buffer.seek(0)
+
+    # Procesar el PDF sin hipervínculos
+    doc = fitz.open(stream=cleaned_pdf_buffer, filetype="pdf")
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
