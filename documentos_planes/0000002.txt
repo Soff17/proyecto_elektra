@@ -1,0 +1,6 @@
+Sku: 0000002
+Categoria: Planes
+Producto: Plan Total
+Pago: 60 $ semanales 
+Incluye: Hasta 3.5 GB para navegar. Con tu pago 2 GB + pago puntual 1 GB + Portabilidad/Renovación + .5 GB. Redes sociales incluidas, llamadas y mensajes ilimitados.
+Vigencia: 19 al 21 de noviembre de 2024.

@@ -187,3 +187,18 @@ def upload_text_buffer(bucket_name, folder_name, file_name, text_buffer):
     blob = bucket.blob(f'{folder_name}/{file_name}')
     blob.upload_from_file(text_buffer, content_type='text/plain')
     print(f"El archivo de texto '{file_name}' fue subido exitosamente al bucket '{bucket_name}/{folder_name}'.")
+
+def upload_file(bucket_name, folder_name, file_path):
+    """
+    Subir un archivo genérico al bucket de Google Cloud Storage.
+    
+    :param bucket_name: Nombre del bucket en GCP.
+    :param folder_name: Carpeta dentro del bucket donde se subirá el archivo.
+    :param file_path: Ruta del archivo local a subir.
+    """
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob_name = f"{folder_name}/{os.path.basename(file_path)}"
+    blob = bucket.blob(blob_name)
+    blob.upload_from_filename(file_path)
+    print(f"Archivo '{os.path.basename(file_path)}' subido exitosamente a '{bucket_name}/{folder_name}'.")

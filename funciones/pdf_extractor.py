@@ -662,6 +662,8 @@ def sanitizar_nombre_categoria(categoria):
         nombre_final = "Home_Audio"
     elif nombre_final == "Linea":
         nombre_final = "Linea_Blanca"
+    elif nombre_final == "Nuevas":
+        nombre_final = "Nuevas_Categorias"
     elif not nombre_final:
         return "nombre_temporal"
     

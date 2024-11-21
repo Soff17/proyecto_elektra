@@ -319,6 +319,13 @@ def procesar_y_subir():
                 print("Todos los documentos han sido eliminados.")
                 pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_reportes_bucket)
                 pe.particion_pdf(pdf_buffer, bucket_name,carpeta_pdfs_bucket)
+                local_folder = './documentos_planes'  # Carpeta local donde se guardan los documentos particionados
+                if os.path.exists(local_folder):
+                    for file_name in os.listdir(local_folder):
+                        local_file_path = os.path.join(local_folder, file_name)
+                        if os.path.isfile(local_file_path):
+                            # Subir cada archivo al bucket en carpeta_documentos_correcciones_bucket
+                            st.upload_file(bucket_name, carpeta_documentos_correcciones_bucket, local_file_path)
                 print("PDF procesado exitosamente.")
                 break
             else:
