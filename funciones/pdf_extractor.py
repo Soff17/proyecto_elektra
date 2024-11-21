@@ -544,13 +544,15 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
     buffer_categoria = ""
+    archivos_finales = []  # Lista para almacenar los archivos finales
+
     # Eliminar hipervínculos de todas las páginas
     for page_num in range(doc.page_count):
         page = doc[page_num]
         links = page.get_links()
         for link in links:
             page.delete_link(link)  # Elimina cada hipervínculo encontrado en la página
-    
+
     # Guardar el PDF sin hipervínculos en un buffer temporal
     cleaned_pdf_buffer = io.BytesIO()
     doc.save(cleaned_pdf_buffer)
@@ -558,7 +560,7 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
 
     # Volver a abrir el PDF limpio para particionar
     doc = fitz.open(stream=cleaned_pdf_buffer, filetype="pdf")
-    
+
     # Obtener la carpeta de descargas del usuario
     downloads_folder = get_downloads_folder()
 
@@ -567,11 +569,12 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
     if not os.path.exists(ruta_pdfs_finales):
         os.makedirs(ruta_pdfs_finales)
 
+    # Procesar cada página del PDF
     for num_page in range(doc.page_count):
         # Crear un nuevo PDF con solo una página
         doc_pagina = fitz.open()
         doc_pagina.insert_pdf(doc, from_page=num_page, to_page=num_page)
-        
+
         # Extraer el nombre de la categoría de la página
         page = doc.load_page(num_page)
         categoria = extraer_categoria(page)
@@ -581,31 +584,37 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
 
         # Nombre del archivo para la página basado en la categoría
         nombre_archivo_pdf = f"{nombre_categoria_sanitizado}.pdf"
-        
-        # Guardar localmente en la carpeta 'pdfs_finales'
         ruta_local_pdf = os.path.join(ruta_pdfs_finales, nombre_archivo_pdf)
 
-        print(ruta_local_pdf)
-
-        # Guardar el PDF de una página en la ruta local
+        # Guardar el PDF de una página en la carpeta local
         doc_pagina.save(ruta_local_pdf)
         print(f"Página {num_page + 1} guardada como {ruta_local_pdf}")
-        
-        # Crear un buffer de bytes para almacenar el PDF en memoria
-        pdf_buffer_output = io.BytesIO()
-        doc_pagina.save(pdf_buffer_output)
-        pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
 
-        # Subir el PDF al bucket directamente desde el buffer
-        st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
-        print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
+        # Si la categoría es "nombre_temporal", combinar con el archivo anterior
+        if nombre_categoria_sanitizado == "nombre_temporal" and buffer_categoria:
+            archivo_anterior = os.path.join(ruta_pdfs_finales, f"{buffer_categoria}.pdf")
+            join_pdfs(archivo_anterior, ruta_local_pdf)
+            ruta_local_pdf = archivo_anterior  # Actualizar la ruta al archivo combinado
+        else:
+            buffer_categoria = nombre_categoria_sanitizado
+
+        # Agregar el archivo final (combinado o único) a la lista
+        if ruta_local_pdf not in archivos_finales:
+            archivos_finales.append(ruta_local_pdf)
 
         doc_pagina.close()
-        if nombre_categoria_sanitizado == "nombre_temporal":
-            join_pdfs(os.path.join(ruta_pdfs_finales, f"{buffer_categoria}.pdf"), ruta_local_pdf)
-        buffer_categoria = nombre_categoria_sanitizado
 
     doc.close()
+
+    # Subir los archivos finales al bucket
+    for archivo_final in archivos_finales:
+        with open(archivo_final, "rb") as file:
+            pdf_buffer_output = io.BytesIO(file.read())
+            pdf_buffer_output.seek(0)
+            nombre_archivo_pdf = os.path.basename(archivo_final)
+            st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
+            print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
+
 
 
 # Lista global para almacenar las categorías extraídas
@@ -632,22 +641,31 @@ def extraer_categoria(page):
 
 
 def join_pdfs(first_pdf_path, second_pdf_path):
-    doc1 = fitz.open(first_pdf_path)
-    doc2 = fitz.open(second_pdf_path)
+    if not os.path.exists(first_pdf_path) or not os.path.exists(second_pdf_path):
+        print(f"Uno de los archivos PDF no existe: {first_pdf_path}, {second_pdf_path}")
+        return
 
-    # Insertar el contenido del segundo documento en el primero
-    doc1.insert_pdf(doc2)
+    try:
+        doc1 = fitz.open(first_pdf_path)
+        doc2 = fitz.open(second_pdf_path)
 
-    # Guardar los cambios en un archivo temporal primero
-    temp_path = "temp_file.pdf"
-    doc1.save(temp_path, incremental=False)  # Guardar sin modo incremental
-    doc1.close()
-    doc2.close()
-    os.remove(second_pdf_path)
+        # Insertar el contenido del segundo documento en el primero
+        doc1.insert_pdf(doc2)
 
-    # Mover el archivo temporal al archivo original, sobrescribiéndolo
-    os.replace(temp_path, first_pdf_path)
-    print(f"El PDF combinado ha sido guardado sobre: {first_pdf_path}")
+        # Guardar los cambios en un archivo temporal primero
+        temp_path = "temp_file.pdf"
+        doc1.save(temp_path, incremental=False)  # Guardar sin modo incremental
+        doc1.close()
+        doc2.close()
+
+        # Eliminar el archivo original y mover el temporal al lugar correcto
+        os.remove(second_pdf_path)
+        os.replace(temp_path, first_pdf_path)
+        print(f"El PDF combinado ha sido guardado sobre: {first_pdf_path}")
+
+    except Exception as e:
+        print(f"Error al combinar PDFs: {e}")
+
 
 def sanitizar_nombre_categoria(categoria):
     # Reemplazar solo los caracteres no válidos, mantener los espacios y convertirlos a guiones bajos

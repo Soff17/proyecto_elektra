@@ -29,6 +29,41 @@ carpeta_reportes_bucket = os.getenv('carpeta_reportes_bucket')
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Endpoint para descargar arhcivos pdf almacenados en GCP
+@app.route('/descargar_pdfs', methods=['POST'])
+def descargar_todos_pdfs():
+    try:
+        # Verificar el token antes de proceder
+        verificar_token()
+        data = request.get_json()
+        local_folder = data.get('local_folder')
+
+        if not local_folder:
+            return jsonify({"error": "Falta el parámetro 'local_folder'"}), 400
+
+        if not os.path.exists(local_folder):
+            os.makedirs(local_folder)
+
+        client = st.initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+
+        blobs = bucket.list_blobs(prefix=carpeta_pdfs_bucket)
+
+        resultados = []
+        for blob in blobs:
+            if blob.name.endswith('.pdf'):
+                local_path = os.path.join(local_folder, os.path.basename(blob.name))
+                with open(local_path, "wb") as file:
+                    blob.download_to_file(file)
+                resultados.append({"file_name": os.path.basename(blob.name), "status": "descargado"})
+            else:
+                resultados.append({"file_name": os.path.basename(blob.name), "status": "no es un PDF"})
+
+        return jsonify({"resultados": resultados}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 # Endpoint para eliminar todo el contenido de una carpeta en el bucket (sin eliminar la carpeta)
 @app.route('/vaciar_carpeta', methods=['DELETE'])
 def vaciar_carpeta():
@@ -36,14 +71,12 @@ def vaciar_carpeta():
         # Verificar el token antes de proceder
         verificar_token()
 
-        # Obtener el nombre de la carpeta del cuerpo de la solicitud
         data = request.get_json()
         bucket_folder = data.get('bucket_folder')
 
         if not bucket_folder:
             return jsonify({"error": "Falta el parámetro 'bucket_folder'"}), 400
 
-        # Llamar a la función para vaciar la carpeta
         st.empty_bucket_folder(bucket_name, bucket_folder)
 
         return jsonify({"message": f"Todo el contenido de la carpeta '{bucket_folder}' fue eliminado exitosamente."}), 200
@@ -55,17 +88,17 @@ def vaciar_carpeta():
 @app.route('/descargar_elastic_documentos', methods=['POST'])
 def descargar_elastic_documentos():
     try:
+        # Verificar el token antes de proceder
         verificar_token()
         data = request.get_json()
-        file_names = data.get('file_names')  # Lista de nombres de archivos
-        local_folder = data.get('local_folder')  # Carpeta local donde guardar los archivos
+        file_names = data.get('file_names') 
+        local_folder = data.get('local_folder')
 
         if not file_names:
             return jsonify({"error": "Falta el parámetro 'file_names'"}), 400
         if not local_folder:
             return jsonify({"error": "Falta el parámetro 'local_folder'"}), 400
 
-        # Asegúrate de que la carpeta local existe, si no, créala
         if not os.path.exists(local_folder):
             os.makedirs(local_folder)
 
@@ -79,7 +112,6 @@ def descargar_elastic_documentos():
                 resultados.append({"file_name": file_name, "status": "no encontrado"})
                 continue
 
-            # Descargar archivo y guardarlo en la carpeta local
             local_path = os.path.join(local_folder, f"{file_name}.txt")
             with open(local_path, "wb") as file:
                 blob.download_to_file(file)
@@ -94,17 +126,17 @@ def descargar_elastic_documentos():
 @app.route('/descargar_correcciones_documentos', methods=['POST'])
 def descargar_correcciones_documentos():
     try:
+        # Verificar el token antes de proceder
         verificar_token()
         data = request.get_json()
-        file_names = data.get('file_names')  # Lista de nombres de archivos
-        local_folder = data.get('local_folder')  # Carpeta local donde guardar los archivos
+        file_names = data.get('file_names')
+        local_folder = data.get('local_folder')
 
         if not file_names:
             return jsonify({"error": "Falta el parámetro 'file_names'"}), 400
         if not local_folder:
             return jsonify({"error": "Falta el parámetro 'local_folder'"}), 400
 
-        # Asegúrate de que la carpeta local existe, si no, créala
         if not os.path.exists(local_folder):
             os.makedirs(local_folder)
 
@@ -118,7 +150,6 @@ def descargar_correcciones_documentos():
                 resultados.append({"file_name": file_name, "status": "no encontrado"})
                 continue
 
-            # Descargar archivo y guardarlo en la carpeta local
             local_path = os.path.join(local_folder, f"{file_name}.txt")
             with open(local_path, "wb") as file:
                 blob.download_to_file(file)
@@ -133,15 +164,15 @@ def descargar_correcciones_documentos():
 @app.route('/subir_imagenes', methods=['POST'])
 def subir_imagenes_carpeta():
     try:
+        # Verificar el token antes de proceder
         verificar_token()
         data = request.get_json()
-        folder_path = data.get('folder_path')  # Carpeta local de donde se suben las imágenes
-        bucket_folder = data.get('bucket_folder')  # Carpeta en el bucket (opcional)
+        folder_path = data.get('folder_path') 
+        bucket_folder = data.get('bucket_folder') 
 
         if not folder_path:
             return jsonify({"error": "Falta el parámetro 'folder_path'"}), 400
 
-        # Subir imágenes a la carpeta especificada en el bucket
         st.upload_images_in_folder(bucket_name, folder_path, bucket_folder)
 
         return jsonify({"mensaje": "Imágenes subidas correctamente"}), 200
@@ -149,19 +180,18 @@ def subir_imagenes_carpeta():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Endpoint para subir imágenes desde una carpeta local a Google Cloud Storage, especificando una carpeta en el bucket
+# Endpoint para subir archivos pdf desde una carpeta local a Google Cloud Storage, especificando una carpeta en el bucket
 @app.route('/subir_pdfs', methods=['POST'])
 def subir_pdfs_carpeta():
     try:
         verificar_token()
         data = request.get_json()
-        folder_path = data.get('folder_path')  # Carpeta local de donde se suben las imágenes
-        bucket_folder = data.get('bucket_folder')  # Carpeta en el bucket (opcional)
+        folder_path = data.get('folder_path') 
+        bucket_folder = data.get('bucket_folder')
 
         if not folder_path:
             return jsonify({"error": "Falta el parámetro 'folder_path'"}), 400
 
-        # Subir imágenes a la carpeta especificada en el bucket
         st.upload_pdfs_in_folder(bucket_name, folder_path, bucket_folder)
 
         return jsonify({"mensaje": "Pdfs subidos correctamente"}), 200
@@ -173,10 +203,11 @@ def subir_pdfs_carpeta():
 @app.route('/eliminar_imagenes', methods=['DELETE'])
 def eliminar_imagenes():
     try:
+        # Verificar el token antes de proceder
         verificar_token()
         data = request.get_json()
-        imagenes_nombres = data.get('nombres')  # Lista de nombres de las imágenes a eliminar
-        bucket_folder = data.get('bucket_folder', carpeta_imagenes_bucket)  # Carpeta en el bucket (opcional)
+        imagenes_nombres = data.get('nombres') 
+        bucket_folder = data.get('bucket_folder', carpeta_imagenes_bucket)
 
         if not imagenes_nombres:
             return jsonify({"error": "Falta el parámetro 'nombres'"}), 400
@@ -202,10 +233,12 @@ def eliminar_imagenes():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+
+# Endpoint para eliminar documentos por su id de Elastic Search
 @app.route('/eliminar_documentos', methods=['DELETE'])
 def eliminar_documentos():
     try:
+        # Verificar el token antes de proceder
         verificar_token()
         data = request.get_json()
         documento_ids = data.get('documento_ids')
@@ -215,14 +248,12 @@ def eliminar_documentos():
         if not documento_ids:
             return jsonify({"error": "Falta el parámetro 'documento_ids'"}), 400
 
-        # Asegurarse de que documento_ids es una lista, incluso si es solo un ID
         if isinstance(documento_ids, str):
             documento_ids = [documento_ids]
 
         resultados = []
         for doc_id in documento_ids:
             try:
-                # Usar directamente el método delete de la instancia `es`
                 es.eliminar_documento(INDICE,doc_id )
                 resultados.append({"documento_id": doc_id, "status": "eliminado"})
             except NotFoundError:
@@ -235,10 +266,11 @@ def eliminar_documentos():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
         
-# Endpoint para subir archivos de una carpeta al índice
+# Endpoint para subir archivos de una carpeta al índice de Elastic Search
 @app.route('/subir_archivos', methods=['POST'])
 def subir_archivos():
     try:
+        # Verificar el token antes de proceder
         verificar_token()
         #es.eliminar_documentos("elektra-docs")
         # Paso 2: Esperar a que el índice esté vacío
@@ -250,10 +282,10 @@ def subir_archivos():
                 break
             else:
                 print(f"Aún quedan {total_documentos} documentos en el índice. Esperando...")
-                time.sleep(5)  # Espera 5 segundos antes de volver a verificar
+                time.sleep(5) 
         '''
         data = request.get_json()
-        carpeta = data.get('carpeta')  # Capturamos la carpeta desde el body de la solicitud
+        carpeta = data.get('carpeta') 
 
         if not INDICE:
             return jsonify({"error": "Falta el parámetro 'indice'"}), 400
@@ -261,7 +293,6 @@ def subir_archivos():
         if not carpeta:
             return jsonify({"error": "Falta el parámetro 'carpeta'"}), 400
 
-        # Subir todos los archivos de la carpeta al índice especificado
         es.subir_archivos_de_carpeta(INDICE, carpeta)
 
         return jsonify({"mensaje": f"Archivos subidos correctamente al índice {INDICE} desde la carpeta {carpeta}"}), 200
@@ -272,8 +303,11 @@ def subir_archivos():
 # Endpoint para generar un token dinámico
 @app.route('/generate_token', methods=['GET'])
 def generate_token_endpoint():
-    token = generate_token()
-    return jsonify({"token": token}), 200
+    try:
+        token = generate_token()
+        return jsonify({"token": token}), 200
+    except Exception as e:
+        return jsonify({"error": "Failed to generate token", "message": str(e)}), 500
 
 # Endpoint para procesamiento de documento e imágenes
 @app.route('/ingesta_documentos', methods=['POST'])
@@ -282,7 +316,6 @@ def procesar_y_subir():
         # Verificar el token antes de proceder
         verificar_token()
 
-        # Verificar si se recibió un archivo PDF
         if 'file' not in request.files:
             return jsonify({"error": "No se encontró el archivo PDF en la solicitud"}), 400
 
@@ -319,12 +352,11 @@ def procesar_y_subir():
                 print("Todos los documentos han sido eliminados.")
                 pe.procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_reportes_bucket)
                 pe.particion_pdf(pdf_buffer, bucket_name,carpeta_pdfs_bucket)
-                local_folder = './documentos_planes'  # Carpeta local donde se guardan los documentos particionados
+                local_folder = './documentos_planes'
                 if os.path.exists(local_folder):
                     for file_name in os.listdir(local_folder):
                         local_file_path = os.path.join(local_folder, file_name)
                         if os.path.isfile(local_file_path):
-                            # Subir cada archivo al bucket en carpeta_documentos_correcciones_bucket
                             st.upload_file(bucket_name, carpeta_documentos_correcciones_bucket, local_file_path)
                 print("PDF procesado exitosamente.")
                 break
