@@ -83,44 +83,6 @@ def vaciar_carpeta():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-# Endpoint para descargar una lista de archivos desde carpeta_documentos_elastic_bucket y guardarlos en una carpeta local
-@app.route('/descargar_elastic_documentos', methods=['POST'])
-def descargar_elastic_documentos():
-    try:
-        # Verificar el token antes de proceder
-        verificar_token()
-        data = request.get_json()
-        file_names = data.get('file_names') 
-        local_folder = data.get('local_folder')
-
-        if not file_names:
-            return jsonify({"error": "Falta el parámetro 'file_names'"}), 400
-        if not local_folder:
-            return jsonify({"error": "Falta el parámetro 'local_folder'"}), 400
-
-        if not os.path.exists(local_folder):
-            os.makedirs(local_folder)
-
-        client = st.initialize_storage_client()
-        bucket = client.bucket(bucket_name)
-
-        resultados = []
-        for file_name in file_names:
-            blob = bucket.blob(f"{carpeta_documentos_elastic_bucket}/{file_name}.txt")
-            if not blob.exists():
-                resultados.append({"file_name": file_name, "status": "no encontrado"})
-                continue
-
-            local_path = os.path.join(local_folder, f"{file_name}.txt")
-            with open(local_path, "wb") as file:
-                blob.download_to_file(file)
-            resultados.append({"file_name": file_name, "status": "descargado"})
-
-        return jsonify({"resultados": resultados}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 # Endpoint para descargar una lista de archivos desde carpeta_documentos_correcciones_bucket y guardarlos en una carpeta local
 @app.route('/descargar_correcciones_documentos', methods=['POST'])
@@ -234,7 +196,7 @@ def eliminar_imagenes():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Endpoint para eliminar documentos por su id de Elastic Search
+# Se elimina de elastic search y de GCP, y se descargan para su corrección.
 @app.route('/eliminar_documentos', methods=['DELETE'])
 def eliminar_documentos():
     try:
@@ -242,24 +204,62 @@ def eliminar_documentos():
         verificar_token()
         data = request.get_json()
         documento_ids = data.get('documento_ids')
+        download_folder = data.get('download_folder')  # Carpeta de descarga especificada en la solicitud
 
         if not INDICE:
             return jsonify({"error": "Falta el parámetro 'indice'"}), 400
         if not documento_ids:
             return jsonify({"error": "Falta el parámetro 'documento_ids'"}), 400
+        if not download_folder:
+            return jsonify({"error": "Falta el parámetro 'download_folder'"}), 400
 
         if isinstance(documento_ids, str):
             documento_ids = [documento_ids]
 
         resultados = []
+        client = st.initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+
+        # Crear la carpeta de descarga si no existe
+        if not os.path.exists(download_folder):
+            os.makedirs(download_folder)
+
         for doc_id in documento_ids:
             try:
-                es.eliminar_documento(INDICE,doc_id )
-                resultados.append({"documento_id": doc_id, "status": "eliminado"})
+                # Paso 1: Eliminar documento de ElasticSearch
+                es.eliminar_documento(INDICE, doc_id)
+                elastic_status = "eliminado"
             except NotFoundError:
-                resultados.append({"documento_id": doc_id, "status": "Documento no encontrado"})
+                elastic_status = "no encontrado en ElasticSearch"
             except Exception as e:
-                resultados.append({"documento_id": doc_id, "status": f"Error: {str(e)}"})
+                elastic_status = f"Error en ElasticSearch: {str(e)}"
+
+            # Paso 2: Descargar el documento desde Google Cloud Storage
+            try:
+                blob = bucket.blob(f"{carpeta_documentos_elastic_bucket}/{doc_id}.txt")
+                if blob.exists():
+                    local_path = os.path.join(download_folder, f"{doc_id}.txt")
+                    with open(local_path, "wb") as file:
+                        blob.download_to_file(file)
+                    gcs_status = "descargado"
+
+                    # Paso 3: Eliminar el documento de GCS
+                    blob.delete()
+                    gcs_delete_status = "eliminado"
+                else:
+                    gcs_status = "no encontrado en GCS"
+                    gcs_delete_status = "no encontrado en GCS"
+
+            except Exception as e:
+                gcs_status = f"Error al descargar: {str(e)}"
+                gcs_delete_status = f"Error al eliminar: {str(e)}"
+
+            resultados.append({
+                "documento_id": doc_id,
+                "elastic_status": elastic_status,
+                "gcs_status": gcs_status,
+                "gcs_delete_status": gcs_delete_status
+            })
 
         return jsonify({"resultados": resultados}), 200
 
@@ -272,20 +272,9 @@ def subir_archivos():
     try:
         # Verificar el token antes de proceder
         verificar_token()
-        es.eliminar_documentos("elektra-docs")
-        # Paso 2: Esperar a que el índice esté vacío
-
-        while True:
-            total_documentos = es.contar_documentos("elektra-docs")
-            if total_documentos == 0:
-                print("Todos los documentos han sido eliminados del índice. Comenzando la indexación.")
-                break
-            else:
-                print(f"Aún quedan {total_documentos} documentos en el índice. Esperando...")
-                time.sleep(5) 
 
         data = request.get_json()
-        carpeta = data.get('carpeta') 
+        carpeta = data.get('carpeta')
 
         if not INDICE:
             return jsonify({"error": "Falta el parámetro 'indice'"}), 400
@@ -293,12 +282,27 @@ def subir_archivos():
         if not carpeta:
             return jsonify({"error": "Falta el parámetro 'carpeta'"}), 400
 
+        # Paso 1: Subir archivos al índice de ElasticSearch
         es.subir_archivos_de_carpeta(INDICE, carpeta)
 
-        return jsonify({"mensaje": f"Archivos subidos correctamente al índice {INDICE} desde la carpeta {carpeta}"}), 200
+        # Paso 2: Subir los archivos también a GCP en la carpeta 'carpeta_documentos_elastic_bucket'
+        client = st.initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+
+        # Buscar todos los archivos en la carpeta indicada
+        for file_name in os.listdir(carpeta):
+            local_file_path = os.path.join(carpeta, file_name)
+            if os.path.isfile(local_file_path):
+                # Subir archivo a GCS
+                blob = bucket.blob(f"{carpeta_documentos_elastic_bucket}/{file_name}")
+                blob.upload_from_filename(local_file_path)
+                print(f"Archivo {file_name} subido correctamente a GCS en {carpeta_documentos_elastic_bucket}")
+
+        return jsonify({"mensaje": f"Archivos subidos correctamente al índice {INDICE} y a GCP desde la carpeta {carpeta}"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 # Endpoint para generar un token dinámico
 @app.route('/generate_token', methods=['GET'])
