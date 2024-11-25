@@ -1,3 +1,4 @@
+import io
 import os
 from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor
@@ -202,3 +203,77 @@ def upload_file(bucket_name, folder_name, file_path):
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(file_path)
     print(f"Archivo '{os.path.basename(file_path)}' subido exitosamente a '{bucket_name}/{folder_name}'.")
+
+def download_image_from_bucket(bucket_name, folder_name, image_name):
+    """
+    Descarga una imagen desde el bucket de Google Cloud Storage como un buffer.
+    """
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(f"{folder_name}/{image_name}")
+
+    if blob.exists():
+        image_buffer = io.BytesIO()
+        blob.download_to_file(image_buffer)
+        image_buffer.seek(0)
+        print(f"Imagen '{image_name}' descargada exitosamente del bucket '{bucket_name}/{folder_name}'.")
+        return image_buffer
+    else:
+        print(f"Imagen '{image_name}' no encontrada en el bucket '{bucket_name}/{folder_name}'.")
+        return None
+
+def image_exists_in_bucket(bucket_name, folder_name, image_name):
+    """
+    Verifica si una imagen existe en el bucket de Google Cloud Storage.
+    """
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(f"{folder_name}/{image_name}")
+    return blob.exists()
+
+def download_pdf_buffer(bucket_name, folder, file_name):
+    """
+    Descarga un archivo PDF desde el bucket y lo devuelve como un buffer en memoria.
+    """
+    try:
+        client = initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+        blob_path = f"{folder}/{file_name}"
+        blob = bucket.blob(blob_path)
+
+        if not blob.exists():
+            raise FileNotFoundError(f"El archivo {blob_path} no existe en el bucket {bucket_name}.")
+
+        # Descargar el contenido del archivo al buffer
+        pdf_buffer = io.BytesIO()
+        blob.download_to_file(pdf_buffer)
+        pdf_buffer.seek(0)  # Asegurarse de que el buffer esté al inicio
+
+        print(f"Archivo {blob_path} descargado exitosamente desde el bucket {bucket_name}.")
+        return pdf_buffer
+
+    except Exception as e:
+        print(f"Error al descargar el archivo {file_name}: {e}")
+        raise
+
+def delete_file(bucket_name, file_path):
+    """
+    Elimina un archivo del bucket especificado.
+    
+    Args:
+        bucket_name (str): Nombre del bucket.
+        file_path (str): Ruta completa del archivo dentro del bucket.
+    """
+    try:
+        client = initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(file_path)
+
+        if blob.exists():
+            blob.delete()
+            print(f"Archivo '{file_path}' eliminado del bucket '{bucket_name}'.")
+        else:
+            print(f"Archivo '{file_path}' no encontrado en el bucket '{bucket_name}'.")
+    except Exception as e:
+        print(f"Error al eliminar el archivo '{file_path}' del bucket: {e}")
+        raise

@@ -14,6 +14,7 @@ from openpyxl.styles import PatternFill
 from unidecode import unidecode
 from datetime import datetime
 from PIL import Image
+from threading import Lock
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -211,7 +212,7 @@ def convertir_a_jpeg(imagen_bytes):
         buffer.seek(0)
         return buffer.getvalue()  # Devolver bytes de la imagen en JPEG
     
-def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions):
+def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions, default_image_path="./default.jpeg"):
     images = page.get_image_info(hashes=True, xrefs=True)
     imagenes = []
 
@@ -246,19 +247,6 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         else:
             image_name = f"producto_{count+1}.{ext}"
 
-        # Obtener la carpeta de descargas del usuario
-        downloads_folder = get_downloads_folder()
-
-        # Crear el directorio 'imagenes' dentro de la carpeta Descargas si no existe
-        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
-        if not os.path.exists(ruta_imagenes):
-            os.makedirs(ruta_imagenes)
-
-        # Guardar la imagen en la nueva carpeta de Descargas
-        ruta_imagen = os.path.join(ruta_imagenes, image_name)
-        with open(ruta_imagen, "wb") as f:
-            f.write(image_bytes)
-        
         # Preparar la subida con los datos de la imagen
         image_buffer = io.BytesIO(image_bytes)
         uploads.append((bucket_name, bucket_folder, image_name, image_buffer))
@@ -270,7 +258,6 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
     with ThreadPoolExecutor() as executor:
         futures = [
             executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, image_name, image_buffer)
-            #executor.submit(bucket_name, bucket_folder, image_name, image_buffer)
             for bucket_name, bucket_folder, image_name, image_buffer in uploads
         ]
 
@@ -281,29 +268,29 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
             except Exception as e:
                 print(f"Error al subir la imagen: {e}")
 
-    # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' desde Descargas/imagenes
+    # Si no se encontraron imágenes para algún SKU, asignar imagen predeterminada desde el buffer
+    default_image_buffer = None
+    if os.path.exists(default_image_path):
+        with open(default_image_path, "rb") as default_image_file:
+            default_image_buffer = io.BytesIO(default_image_file.read())
+            default_image_buffer.seek(0)
+
     for sku, _ in sku_positions:
-        ruta_imagen_sku = os.path.join(ruta_imagenes, f"{sku}.jpeg")
-        if not os.path.exists(ruta_imagen_sku):
-            ruta_default = './default.jpeg'
-            if os.path.exists(ruta_default):
-                ruta_imagen = os.path.join(ruta_imagenes, f"{sku}.jpeg")
-                
-                # Copiar localmente la imagen predeterminada
-                with open(ruta_default, "rb") as f_default, open(ruta_imagen, "wb") as f_sku:
-                    default_image_bytes = f_default.read()
-                    f_sku.write(default_image_bytes)
-                print(f"Imagen predeterminada asignada al SKU {sku} localmente.")
-
-                # Subir la imagen predeterminada al bucket usando hilos
-                default_image_buffer = io.BytesIO(default_image_bytes)
+        # Verificar si la imagen ya fue subida
+        image_name = f"{sku}.jpeg"
+        if not any(upload[2] == image_name for upload in uploads):
+            if default_image_buffer:
+                print(f"Asignando imagen predeterminada al SKU {sku}.")
                 with ThreadPoolExecutor() as executor:
-                    executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
-                    #executor.submit(bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
-                print(f"Imagen predeterminada asignada y subida para el SKU {sku}.")
-
+                    executor.submit(
+                        st.upload_image_buffer,
+                        bucket_name,
+                        bucket_folder,
+                        image_name,
+                        io.BytesIO(default_image_buffer.getvalue())  # Crear un nuevo buffer para cada subida
+                    )
             else:
-                print(f"Imagen predeterminada no encontrada.")
+                print(f"Imagen predeterminada no encontrada para SKU {sku}.")
 
 def get_default_image_buffer_from_local(default_image_path="./default.jpeg"):
     try:
@@ -368,14 +355,33 @@ def get_urls(page):
 
         urls.append(matched_url)
 
-def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket):   
+def obtener_imagenes_bucket(bucket_name, carpeta_imagenes_bucket):
+    """
+    Obtiene una lista de todas las imágenes en una carpeta específica del bucket.
+    """
+    client = st.initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blobs = bucket.list_blobs(prefix=carpeta_imagenes_bucket)
+    return {blob.name.split('/')[-1] for blob in blobs if blob.name.endswith('.jpeg')}
+
+def tiene_imagenes_en_bucket(skus, imagenes_existentes):
+    """
+    Valida en lote si los SKUs tienen imágenes en el bucket.
+    """
+    return {sku: f"{sku}.jpeg" in imagenes_existentes for sku in skus}
+
+
+def guardar_informacion_a_elasticsearch(
+    name_file, data, bucket_name, carpeta_documentos_correcciones_bucket, 
+    carpeta_documentos_elastic_bucket, carpeta_imagenes_bucket, imagenes_existentes
+):   
     # Generar el contenido del archivo como una cadena
     contenido_txt = "\n".join(data)
 
     # Validar si la URL contiene el SKU y si la imagen existe
     sku = data[0].replace("Sku: ", "")
     url = data[-1].replace("Url: ", "")
-    imagen_existe = tiene_imagen(sku)
+    imagen_existe = f"{sku}.jpeg" in imagenes_existentes
     subtitulo = data[2]
     categoria = data[1].replace("Categoria:", "").strip().lower()  # Remover "Categoria:" y espacios en blanco
 
@@ -383,11 +389,9 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
     estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:"]
 
     # Expresión regular para validar el formato de "Pago semanal"
-    # Expresión regular para validar el formato de "Pago semanal"
     pago_semanal_pattern = re.compile(
         r'Pago semanal: \$?\d+ x \d+ semanas \$?\d+(,\d{3})* de pago inicial|Pago semanal: \d+ \$ x \d+ semanas con \d+% de enganche'
     )
-
 
     # Verificar si el producto cumple con la estructura requerida
     def cumple_estructura(data):
@@ -398,7 +402,6 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
 
     # Validaciones para enviar a correcciones
     if (
-        not imagen_existe or 
         subtitulo.startswith("Producto: Promoción") or 
         (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria) or 
         not categoria or  # Validar si la categoría está vacía después de quitar espacios
@@ -407,7 +410,6 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
         guardar_en_correcciones(name_file, contenido_txt, bucket_name, carpeta_documentos_correcciones_bucket)
         print(f"'{name_file}.txt' guardado en 'correcciones' debido a validación fallida.")
         return
-
 
     # Crear una lista de tareas para ejecutar en paralelo
     tasks = []
@@ -418,17 +420,6 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
         "contenido": contenido_txt
     }
     tasks.append(("elasticsearch", documento, name_file))
-
-    # Guardar el archivo localmente
-    downloads_folder = get_downloads_folder()
-    ruta_output_files = os.path.join(downloads_folder, 'documentos_elastic')
-    
-    if not os.path.exists(ruta_output_files):
-        os.makedirs(ruta_output_files)
-
-    file_path = os.path.join(ruta_output_files, f"{name_file}.txt")
-    with open(file_path, 'w', encoding='utf-8') as file:
-        file.write(contenido_txt)
 
     # Subida al bucket en la carpeta documentos_elastic
     buffer = io.BytesIO(contenido_txt.encode('utf-8'))
@@ -443,11 +434,9 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
             if task[0] == "elasticsearch":
                 documento, name_file = task[1], task[2]
                 futures.append(executor.submit(es.indexar_documento, "catalogo", name_file, documento))
-                #futures.append(executor.submit("catalogo", name_file, documento))
             elif task[0] == "storage":
                 _, bucket, folder, filename, buffer = task
-                futures.append(executor.submit(st.upload_text_buffer, bucket, folder, filename, buffer))
-                #futures.append(executor.submit(bucket, folder, filename, buffer))
+                futures.append(executor.submit(st.upload_text_buffer, bucket_name, folder, filename, buffer))
 
         # Verificar y manejar posibles errores en las subidas
         for future in futures:
@@ -458,57 +447,21 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
 
     print(f'Se subió "{name_file}.txt" a Elasticsearch y almacenamiento exitosamente.')
 
-
-
-def tiene_imagen(sku):
-    # Verifica si existe una imagen para el SKU
-    extensiones_imagen = ['jpeg']
-    downloads_folder = get_downloads_folder()
-    ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
-    for ext in extensiones_imagen:
-        if os.path.exists(f"{ruta_imagenes}/{sku}.{ext}"):
-            return True
-    return False
-
 from concurrent.futures import ThreadPoolExecutor
 import io
 import os
 
 def guardar_en_correcciones(name_file, contenido, bucket_name, carpeta_documentos_correcciones_bucket):
-    # Obtener la carpeta de descargas del usuario
-    downloads_folder = get_downloads_folder()
-    ruta_correcciones = os.path.join(downloads_folder, 'correcciones')
-    
-    if not os.path.exists(ruta_correcciones):
-        os.makedirs(ruta_correcciones)
-
-    # Ruta completa para guardar el archivo localmente
-    file_path = os.path.join(ruta_correcciones, f"{name_file}.txt")
-    
     # Crear un buffer para la subida a storage
     buffer = io.BytesIO(contenido.encode('utf-8'))
     buffer.seek(0)  # Asegurar que el buffer esté al inicio
 
-    # Definir las tareas de guardado local y subida en paralelo
-    def guardar_local():
-        with open(file_path, 'w', encoding='utf-8') as file:
-            file.write(contenido)
-        print(f"'{name_file}.txt' guardado en 'correcciones' para revisión.")
-
-    def subir_a_storage():
+    try:
+        # Subir directamente al bucket
         st.upload_text_buffer(bucket_name, carpeta_documentos_correcciones_bucket, f"{name_file}.txt", buffer)
-        print(f"'{name_file}.txt' también subido a storage en 'correcciones'.")
-
-    # Ejecutar las tareas en paralelo usando ThreadPoolExecutor
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(guardar_local), executor.submit(subir_a_storage)]
-
-        # Manejar posibles errores en ambas tareas
-        for future in futures:
-            try:
-                future.result()
-            except Exception as e:
-                print(f"Error al ejecutar tarea: {e}")
+        print(f"'{name_file}.txt' guardado exitosamente en el bucket '{carpeta_documentos_correcciones_bucket}'.")
+    except Exception as e:
+        print(f"Error al guardar '{name_file}.txt' en el bucket: {e}")
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
@@ -561,14 +514,6 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
     # Volver a abrir el PDF limpio para particionar
     doc = fitz.open(stream=cleaned_pdf_buffer, filetype="pdf")
 
-    # Obtener la carpeta de descargas del usuario
-    downloads_folder = get_downloads_folder()
-
-    # Crear la carpeta 'pdfs_finales' dentro de la carpeta Descargas si no existe
-    ruta_pdfs_finales = os.path.join(downloads_folder, 'pdfs_finales')
-    if not os.path.exists(ruta_pdfs_finales):
-        os.makedirs(ruta_pdfs_finales)
-
     # Procesar cada página del PDF
     for num_page in range(doc.page_count):
         # Crear un nuevo PDF con solo una página
@@ -584,38 +529,58 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
 
         # Nombre del archivo para la página basado en la categoría
         nombre_archivo_pdf = f"{nombre_categoria_sanitizado}.pdf"
-        ruta_local_pdf = os.path.join(ruta_pdfs_finales, nombre_archivo_pdf)
 
-        # Guardar el PDF de una página en la carpeta local
-        doc_pagina.save(ruta_local_pdf)
-        print(f"Página {num_page + 1} guardada como {ruta_local_pdf}")
+        # Guardar el PDF de una página en un buffer
+        pdf_page_buffer = io.BytesIO()
+        doc_pagina.save(pdf_page_buffer)
+        pdf_page_buffer.seek(0)
+
+        # Subir el archivo PDF directamente al bucket
+        st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_page_buffer)
+        print(f"Página {num_page + 1} subida como {nombre_archivo_pdf} al bucket '{bucket_folder}'.")
 
         # Si la categoría es "nombre_temporal", combinar con el archivo anterior
         if nombre_categoria_sanitizado == "nombre_temporal" and buffer_categoria:
-            archivo_anterior = os.path.join(ruta_pdfs_finales, f"{buffer_categoria}.pdf")
-            join_pdfs(archivo_anterior, ruta_local_pdf)
-            ruta_local_pdf = archivo_anterior  # Actualizar la ruta al archivo combinado
+            nombre_anterior = f"{buffer_categoria}.pdf"
+            join_pdfs_in_bucket(bucket_name, bucket_folder, nombre_anterior, nombre_archivo_pdf)
         else:
             buffer_categoria = nombre_categoria_sanitizado
-
-        # Agregar el archivo final (combinado o único) a la lista
-        if ruta_local_pdf not in archivos_finales:
-            archivos_finales.append(ruta_local_pdf)
 
         doc_pagina.close()
 
     doc.close()
 
-    # Subir los archivos finales al bucket
-    for archivo_final in archivos_finales:
-        with open(archivo_final, "rb") as file:
-            pdf_buffer_output = io.BytesIO(file.read())
-            pdf_buffer_output.seek(0)
-            nombre_archivo_pdf = os.path.basename(archivo_final)
-            st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
-            print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
 
+def join_pdfs_in_bucket(bucket_name, bucket_folder, first_pdf_name, second_pdf_name):
+    """
+    Combina dos PDFs en el bucket directamente y reemplaza el primero con el archivo combinado.
+    """
+    try:
+        # Descargar los dos PDFs desde el bucket
+        first_pdf_buffer = st.download_pdf_buffer(bucket_name, bucket_folder, first_pdf_name)
+        second_pdf_buffer = st.download_pdf_buffer(bucket_name, bucket_folder, second_pdf_name)
 
+        # Abrir los buffers como documentos de fitz
+        doc1 = fitz.open(stream=first_pdf_buffer, filetype="pdf")
+        doc2 = fitz.open(stream=second_pdf_buffer, filetype="pdf")
+
+        # Insertar el contenido del segundo documento en el primero
+        doc1.insert_pdf(doc2)
+
+        # Guardar el archivo combinado en un buffer
+        combined_pdf_buffer = io.BytesIO()
+        doc1.save(combined_pdf_buffer)
+        combined_pdf_buffer.seek(0)
+
+        # Subir el archivo combinado al bucket, sobrescribiendo el primero
+        st.upload_pdf_buffer(bucket_name, bucket_folder, first_pdf_name, combined_pdf_buffer)
+        print(f"PDFs combinados y guardados como {first_pdf_name} en el bucket.")
+
+        # Eliminar el segundo archivo del bucket
+        st.delete_file(bucket_name, f"{bucket_folder}/{second_pdf_name}")
+
+    except Exception as e:
+        print(f"Error al combinar PDFs {first_pdf_name} y {second_pdf_name}: {e}")
 
 # Lista global para almacenar las categorías extraídas
 categorias_extraidas = []
@@ -705,6 +670,7 @@ ultima_categoria = "Categoria: null"
 
 def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_reportes_bucket ):
     nueva_data_productos.clear()
+    imagenes_existentes = obtener_imagenes_bucket(bucket_name, carpeta_imagenes_bucket)
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
 
@@ -934,9 +900,9 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 data = [sku_num, categoria, subtitulo, content, vigencia]
                 nueva_data_productos.append([sku_num, categoria, subtitulo, content, vigencia])
                 #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
-                guardar_informacion_a_elasticsearch(f"{sku}", data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
+                guardar_informacion_a_elasticsearch(f"{sku}", data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_imagenes_bucket, imagenes_existentes)
     print(categorias_extraidas)
-    generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket)
+    generar_reporte_excel_general_optimizado(bucket_name, carpeta_reportes_bucket, carpeta_imagenes_bucket)
 
 def get_downloads_folder():
     # Obtener la carpeta de descargas según el sistema operativo
@@ -949,7 +915,7 @@ def limpiar_caracteres_especiales(texto):
     # Eliminar caracteres no imprimibles excepto saltos de línea, caracteres acentuados, $, %, /, comillas dobles, comillas dobles de cierre y el símbolo +
     return re.sub(r'[^a-zA-Z0-9áéíóúÁÉÍÓÚüÜñÑ.,;:!?()\[\]{}<>\-\n $%/""”+]+', '', texto)
 
-def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
+def generar_reporte_excel_general_optimizado(bucket_name, carpeta_reportes_bucket, carpeta_imagenes_bucket):
     # Extraer SKU y URL directamente desde `nueva_data_productos`
     skus = [data[0].replace("Sku: ", "") for data in nueva_data_productos]
     urls = [data[-1].replace("Url: ", "") for data in nueva_data_productos]  # Asume que el último campo es la URL
@@ -957,29 +923,26 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
     # Crear la data en un DataFrame para todas las categorías en `nueva_data_productos`
     nueva_data_formateada = [limpiar_caracteres_especiales('\n'.join(data)) for data in nueva_data_productos]
     df = pd.DataFrame({
-        'SKU': skus,  
-        'URL': urls,  
-        'Nueva Data Producto': nueva_data_formateada  
+        'SKU': skus,
+        'URL': urls,
+        'Nueva Data Producto': nueva_data_formateada
     })
 
     # Asegurarse de que tanto la columna 'SKU' como 'URL' sean de tipo string
     df['SKU'] = df['SKU'].astype(str).str.strip()
     df['URL'] = df['URL'].astype(str).str.strip()
 
-    # Crear una columna para verificar si el SKU está contenido en la URL
-    #df['URL Coincide con SKU'] = [sku in url for sku, url in zip(df['SKU'], df['URL'])]
+    # Obtener la lista de imágenes del bucket en una sola operación
+    client = st.initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blobs = list(bucket.list_blobs(prefix=carpeta_imagenes_bucket))
+    image_set = {blob.name.split('/')[-1] for blob in blobs if blob.name.endswith('.jpeg')}
 
-    # Añadir una columna que indique si el SKU tiene una imagen asociada
-    def tiene_imagen(sku):
-        extensiones_imagen = ['jpeg']
-        downloads_folder = get_downloads_folder()
-        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
-        for ext in extensiones_imagen:
-            if os.path.exists(f"{ruta_imagenes}/{sku}.{ext}"):
-                return True
-        return False
+    # Función optimizada para verificar existencia de imágenes
+    def tiene_imagen_optimizado(sku):
+        return f"{sku}.jpeg" in image_set
 
-    df['Tiene Imagen'] = df['SKU'].apply(tiene_imagen)
+    df['Tiene Imagen'] = df['SKU'].apply(tiene_imagen_optimizado)
 
     # Definir la carpeta de descargas y el nombre del archivo consolidado
     downloads_folder = get_downloads_folder()
@@ -992,110 +955,84 @@ def generar_reporte_excel_general(bucket_name, carpeta_reportes_bucket):
     workbook = load_workbook(nombre_archivo_excel)
     sheet = workbook.active
 
-    # Ajustar el ancho de las columnas "SKU", "URL Coincide con SKU" y "Tiene Imagen"
-    col_sku = 1
-    col_url_coincide = sheet.max_column - 1
-    col_tiene_imagen = sheet.max_column 
+    # Ajustar el ancho de las columnas principales
+    sheet.column_dimensions['A'].width = 30  # SKU
+    sheet.column_dimensions['C'].width = 90  # Nueva Data Producto
 
-    sheet.column_dimensions[sheet.cell(row=1, column=col_sku).column_letter].width = 30 
-    sheet.column_dimensions[sheet.cell(row=1, column=col_url_coincide).column_letter].width = 30
-    sheet.column_dimensions[sheet.cell(row=1, column=col_tiene_imagen).column_letter].width = 30
-
-    # Ajustar el ancho de la columna de "Nueva Data Producto" para que sea 3 veces más ancho
-    col_nueva_data = 3
-    sheet.column_dimensions[sheet.cell(row=1, column=col_nueva_data).column_letter].width = 90 
-
-    # Añadir imágenes a una nueva columna al final
+    # Añadir imágenes desde el bucket en una nueva columna
     col_img = sheet.max_column + 1
     sheet.cell(row=1, column=col_img).value = "Imagen"
 
-    # Añadir imágenes en la nueva columna para cada SKU en df
-    for index, sku in enumerate(df['SKU'], start=2):
-        imagen_path = None
-        extensiones_imagen = ['jpeg']
-        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
+    def descargar_y_agregar_imagen(sku, fila):
+        image_name = f"{sku}.jpeg"
+        if image_name in image_set:
+            image_buffer = st.download_image_from_bucket(bucket_name, carpeta_imagenes_bucket, image_name)
+            if image_buffer:
+                img = ExcelImage(image_buffer)
+                img.width = 100
+                img.height = 100
+                sheet.row_dimensions[fila].height = img.height * 0.75
+                img_anchor = sheet.cell(row=fila, column=col_img).coordinate
+                sheet.add_image(img, img_anchor)
 
-        for ext in extensiones_imagen:
-            imagen_path = f"{ruta_imagenes}/{sku}.{ext}"
-            if os.path.exists(imagen_path):
-                break
+    # Procesar imágenes en paralelo
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [
+            executor.submit(descargar_y_agregar_imagen, sku, index + 2)
+            for index, sku in enumerate(df['SKU'])
+        ]
+        for future in futures:
+            future.result()
 
-        if imagen_path and os.path.exists(imagen_path):
-            img = ExcelImage(imagen_path)
-            img.width = 100
-            img.height = 100
-            fila = index
-            sheet.row_dimensions[fila].height = img.height * 0.75 
-            img_anchor = sheet.cell(row=fila, column=col_img).coordinate 
-            sheet.add_image(img, img_anchor)
-
-    # Aplicar formato condicional para resaltar en rojo las celdas con "False" en las columnas "URL Coincide con SKU" y "Tiene Imagen"
+    # Aplicar formato condicional para resaltar en rojo las celdas con "False" en "Tiene Imagen"
     red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
-
-    # Aplicar formato condicional para resaltar en rojo las celdas con "False" en las columnas "URL Coincide con SKU" y "Tiene Imagen"
-    # Comentado: Columna "URL Coincide con SKU"
-    # for row in sheet.iter_rows(min_row=2, min_col=col_url_coincide, max_col=col_url_coincide, max_row=sheet.max_row):
-    #     for cell in row:
-    #         if cell.value == False:
-    #             cell.fill = red_fill
-
-    # Columna "Tiene Imagen"
-    for row in sheet.iter_rows(min_row=2, min_col=col_tiene_imagen, max_col=col_tiene_imagen, max_row=sheet.max_row):
+    for row in sheet.iter_rows(min_row=2, min_col=4, max_col=4, max_row=sheet.max_row):  # Columna 'Tiene Imagen'
         for cell in row:
-            if cell.value == False:
+            if not cell.value:
                 cell.fill = red_fill
 
     # Marcar los SKUs duplicados en color naranja
     orange_fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")
-
-    # Identificar duplicados en la columna SKU
-    sku_column = sheet['A'][1:]  # Column A, excluding header
+    sku_column = sheet['A'][1:]  # Columna 'SKU', excluyendo el encabezado
     sku_values = [cell.value for cell in sku_column]
     duplicated_skus = {sku for sku in sku_values if sku_values.count(sku) > 1}
 
-    # Aplicar el color naranja a los duplicados
     for cell in sku_column:
         if cell.value in duplicated_skus:
             cell.fill = orange_fill
-    
-    # Marcar en amarillo las celdas de "Nueva Data Producto" si el subtítulo comienza con "Producto: Promoción"
-    # o si no cumplen con la estructura y no son de la categoría "equipos" o "planes"
+
+    # Marcar celdas con datos incorrectos en amarillo
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:"]
-    
+
     def cumple_estructura(data):
         for campo in estructura_requerida:
             if not any(campo in item for item in data):
                 return False
         return True
-    
-    # Define pattern for "Pago semanal"
+
     pago_semanal_pattern = re.compile(
         r'Pago semanal: \$?\d+ x \d+ semanas \$?\d+(,\d{3})* de pago inicial|Pago semanal: \d+ \$ x \d+ semanas con \d+% de enganche'
     )
 
-    for index, data in enumerate(nueva_data_productos, start=2):  # Comienza en la fila 2
-        subtitulo = data[2]  # Índice del subtítulo en `nueva_data_productos`
-        categoria = data[1].replace("Categoria:", "").strip().lower()  # Remover etiqueta y espacios en blanco
-        
-        # Verificar si la categoría está vacía o si no cumple con la estructura
+    for index, data in enumerate(nueva_data_productos, start=2):
+        subtitulo = data[2]
+        categoria = data[1].replace("Categoria:", "").strip().lower()
+
         if not categoria or subtitulo.startswith("Producto: Promoción") or (
             not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria
         ) or (categoria != "planes" and not any(pago_semanal_pattern.search(line) for line in data)):
-            cell = sheet.cell(row=index, column=3)  # Columna "Nueva Data Producto"
+            cell = sheet.cell(row=index, column=3)  # Columna 'Nueva Data Producto'
             cell.fill = yellow_fill
 
-    # Guardar el archivo Excel con todas las validaciones e imágenes insertadas
+    # Guardar el archivo Excel con validaciones e imágenes insertadas
     workbook.save(nombre_archivo_excel)
     print(f"Reporte consolidado guardado en {nombre_archivo_excel}")
 
+    # Subir el archivo Excel al bucket
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Subir el archivo Excel al bucket de Google Cloud Storage
     with open(nombre_archivo_excel, "rb") as excel_file:
         excel_buffer = io.BytesIO(excel_file.read())
-        excel_buffer.seek(0)  # Asegurarse de que el buffer esté al inicio
-
-        # Subida al storage con el nombre que incluye fecha y hora
+        excel_buffer.seek(0)
         st.upload_text_buffer(bucket_name, carpeta_reportes_bucket, f"reporte_{timestamp}.xlsx", excel_buffer)
         print(f"El reporte de Excel '{nombre_archivo_excel}' ha sido subido exitosamente al bucket '{bucket_name}/{carpeta_reportes_bucket}'.")
-
