@@ -272,9 +272,9 @@ def subir_archivos():
     try:
         # Verificar el token antes de proceder
         verificar_token()
-        #es.eliminar_documentos("elektra-docs")
+        es.eliminar_documentos("elektra-docs")
         # Paso 2: Esperar a que el índice esté vacío
-        ''''
+
         while True:
             total_documentos = es.contar_documentos("elektra-docs")
             if total_documentos == 0:
@@ -283,7 +283,7 @@ def subir_archivos():
             else:
                 print(f"Aún quedan {total_documentos} documentos en el índice. Esperando...")
                 time.sleep(5) 
-        '''
+
         data = request.get_json()
         carpeta = data.get('carpeta') 
 
