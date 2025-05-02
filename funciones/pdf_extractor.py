@@ -12,6 +12,9 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from openpyxl.styles import PatternFill
 from unidecode import unidecode
+from datetime import datetime
+from PIL import Image
+from threading import Lock
 
 sku_pattern = re.compile(r'Sku:\s*(\S+)')
 sku_pattern_2 = re.compile(r'Sku de referencia:\s*(\S+)')
@@ -43,6 +46,23 @@ data_reporte = {
     'URL': []
 }
 
+def elimanr_ultimas_paginas(pdf, output_path):
+    doc = fitz.open(pdf)
+
+    number_of_pages = doc.page_count
+
+    page_to_delete = [number_of_pages - 1, number_of_pages - 2, number_of_pages - 3]
+
+    page_to_delete.sort(reverse=True)
+
+    for page in page_to_delete:
+        doc.delete_page(page)
+
+    # El output path tiene que ser el nombre del archvio
+    # Ejemplo: ./pdf_buffer.pdf
+    doc.save(output_path)
+    doc.close
+
 def nombre_de_categoria(font_size, font_flags):
     if (font_size > 43) and font_flags == 20:
         return True
@@ -69,6 +89,7 @@ def extraer_informacion(page):
 
     # Determinar la categoría antes de procesar el resto de la información
     categoria = extraer_categoria(page)
+    nombre_producto_actual = ""  # Variable para capturar temporalmente el nombre del producto
 
     for block in blocks:
         if 'lines' in block:
@@ -79,39 +100,51 @@ def extraer_informacion(page):
                     text_flags = span['flags']
                     text_y_position = span['bbox'][1]
 
-                    # Get nombre de categoría
+                    # Detección de categoría
                     if nombre_de_categoria(text_size, text_flags) and not inicio_producto:
                         if not inicio_productos and len(titulos) > 0:
                             titulos[-1] += " " + text
                         else:
                             titulos.append(text)
 
-                    # Get nombre de producto
-                    # Get nombre de producto usando la nueva condición de la categoría
+                    # Acumulación del nombre de producto en múltiples líneas
                     elif nombre_del_producto(text_size, text_flags, categoria):
                         if inicio_producto:
-                            subtitulos[-1] += " " + text
+                            nombre_producto_actual += " " + text
                         else:
-                            subtitulos.append(text)
+                            nombre_producto_actual = text
                             inicio_producto = True
-                            datos = ''
                         inicio_productos = True
 
-                    # Get SKUs
+                    # Detección de SKU y consolidación del nombre de producto
                     elif sku_pattern.findall(text):
                         sku = sku_pattern.findall(text)[0].replace(".", "")
                         skus.append(sku)
-                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                        sku_positions.append((sku, text_y_position))
                         fin_producto = True
+
+                        # Asignar el nombre del producto acumulado a subtítulos si está disponible
+                        if nombre_producto_actual:
+                            subtitulos.append(nombre_producto_actual.strip())  # Limpiar cualquier espacio adicional
+                            nombre_producto_actual = ""  # Limpiar para el próximo producto
+                        else:
+                            subtitulos.append("Producto")
+                            precios.append("Pago de contado: NA")
 
                     elif sku_pattern_2.findall(text):
                         sku = sku_pattern_2.findall(text)[0].replace(".", "")
                         skus.append(sku)
-                        sku_positions.append((sku, text_y_position))  # Registrar posición del SKU
+                        sku_positions.append((sku, text_y_position))
                         fin_producto = True
                         inicio_producto = True
-                        subtitulos.append("Producto")
-                        precios.append(f"Pago de contado: NA")
+                        
+                        # Consolidación para este caso de SKU alternativo
+                        if nombre_producto_actual:
+                            subtitulos.append(nombre_producto_actual.strip())
+                            nombre_producto_actual = ""
+                        else:
+                            subtitulos.append("Producto")
+                            precios.append("Pago de contado: NA")
 
                     elif sku_pattern_3.findall(text):
                         text = text.replace('Sku´s de referencia: ', '')
@@ -119,30 +152,31 @@ def extraer_informacion(page):
 
                         if skus_encontrados:
                             primer_sku = skus_encontrados[0]
-
-                            # Verificar si el primer SKU ya está en la lista de SKUs
                             if primer_sku in skus and len(skus_encontrados) > 1:
-                                # Si el primer SKU ya existe, combinarlo con el segundo SKU
                                 segundo_sku = skus_encontrados[1]
                                 sku_combination = f"{primer_sku} y {segundo_sku}"
                                 skus.append(sku_combination)
                                 sku_positions.append((sku_combination, text_y_position))
                             elif primer_sku not in skus:
-                                # Si el primer SKU no existe, agregarlo normalmente
                                 skus.append(primer_sku)
-                                sku_positions.append((primer_sku, text_y_position))  # Registrar posición del primer SKU
+                                sku_positions.append((primer_sku, text_y_position))
                             elif len(skus_encontrados) > 1:
-                                # Si el primer SKU ya existe y hay un segundo, usar el segundo SKU solo
                                 segundo_sku = skus_encontrados[1]
                                 skus.append(segundo_sku)
-                                sku_positions.append((segundo_sku, text_y_position))  # Registrar posición del segundo SKU
+                                sku_positions.append((segundo_sku, text_y_position))
 
                         fin_producto = True
                         inicio_producto = True
-                        subtitulos.append("Producto")
-                        precios.append(f"Pago de contado: NA")
+                        
+                        # Consolidación del nombre del producto acumulado
+                        if nombre_producto_actual:
+                            subtitulos.append(nombre_producto_actual.strip())
+                            nombre_producto_actual = ""
+                        else:
+                            subtitulos.append("Producto")
+                            precios.append("Pago de contado: NA")
 
-                    # Get Vigencias
+                    # Captura de vigencia
                     elif vigencia_pattern.findall(text) and fin_producto and inicio_producto:
                         vigencias.append(text)
                         info.append(datos)
@@ -150,32 +184,16 @@ def extraer_informacion(page):
                         fin_producto = False
                         inicio_producto = False
 
-                    # Delete info extra
+                    # Eliminar información extra
                     elif delete_pattern.findall(text) or delete_pattern2.findall(text):
                         continue
                     
-                    # Get Precio precio_del_producto(text_size, text_flags)
+                    # Captura de precios
                     elif precio_pattern3.findall(text):
-                        precio = precio_pattern3.findall(text)[0]  # Capturar el precio completo
+                        precio = precio_pattern3.findall(text)[0]
                         precios.append(f"Pago de contado: {precio}")
 
-                        # Get el cupon
-                        '''''
-                        elif bono_pattern.findall(text):
-                            cupones.append(text)
-
-                        elif bono_pattern2.findall(text) and len(cupones) > 0:
-                            texto_original = cupones[-1] + " " + text
-                            texto_sin_espacios = re.sub(r'\s(?=[A-Za-z0-9])', '', texto_original)
-                            texto_intermedio = re.sub(r'\s+\$', ' $', texto_sin_espacios)
-                            texto_corregido = re.sub(r'RegaloDe', 'Regalo de', texto_intermedio, flags=re.IGNORECASE)
-                            texto_sin_caracteres_especiales = re.sub(r'[!¡*]', '', texto_corregido).strip()
-                            texto_final = texto_sin_caracteres_especiales.lower()
-                            texto_final = 'Bono' + texto_final[4:]
-
-                            cupones[-1] = texto_final
-                        '''
-                    # Get Info producto
+                    # Captura de información del producto
                     else:
                         if datos == '':
                             datos = text
@@ -184,7 +202,17 @@ def extraer_informacion(page):
 
     return sku_positions  # Devolver las posiciones de los SKUs para asignar imágenes
 
-def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions):
+
+
+def convertir_a_jpeg(imagen_bytes):
+    with Image.open(io.BytesIO(imagen_bytes)) as img:
+        img_rgb = img.convert('RGB')  # Convertir a RGB si es necesario
+        buffer = io.BytesIO()
+        img_rgb.save(buffer, format="JPEG")  # Guardar como JPEG
+        buffer.seek(0)
+        return buffer.getvalue()  # Devolver bytes de la imagen en JPEG
+    
+def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions, default_image_path="./default.jpeg"):
     images = page.get_image_info(hashes=True, xrefs=True)
     imagenes = []
 
@@ -207,6 +235,10 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         image_bytes = base_image["image"]
         ext = base_image["ext"]
 
+        if ext != "jpeg":
+            # Convertir a JPEG si la extensión no es "jpeg"
+            image_bytes = convertir_a_jpeg(image_bytes)
+
         # Encontrar el SKU más cercano basado en la posición Y
         closest_sku = find_closest_sku(sku_positions, bbox[3])
 
@@ -215,19 +247,6 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
         else:
             image_name = f"producto_{count+1}.{ext}"
 
-        # Obtener la carpeta de descargas del usuario
-        downloads_folder = get_downloads_folder()
-
-        # Crear el directorio 'imagenes' dentro de la carpeta Descargas si no existe
-        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
-        if not os.path.exists(ruta_imagenes):
-            os.makedirs(ruta_imagenes)
-
-        # Guardar la imagen en la nueva carpeta de Descargas
-        ruta_imagen = os.path.join(ruta_imagenes, image_name)
-        with open(ruta_imagen, "wb") as f:
-            f.write(image_bytes)
-        
         # Preparar la subida con los datos de la imagen
         image_buffer = io.BytesIO(image_bytes)
         uploads.append((bucket_name, bucket_folder, image_name, image_buffer))
@@ -238,8 +257,7 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
     # Usar hilos para subir las imágenes
     with ThreadPoolExecutor() as executor:
         futures = [
-            #executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, image_name, image_buffer)
-            executor.submit(bucket_name, bucket_folder, image_name, image_buffer)
+            executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, image_name, image_buffer)
             for bucket_name, bucket_folder, image_name, image_buffer in uploads
         ]
 
@@ -250,29 +268,29 @@ def extraer_imagenes_orden(bucket_name, bucket_folder, page, doc, sku_positions)
             except Exception as e:
                 print(f"Error al subir la imagen: {e}")
 
-    # Si no se encontraron imágenes para algún SKU, usa 'default.jpeg' desde Descargas/imagenes
+    # Si no se encontraron imágenes para algún SKU, asignar imagen predeterminada desde el buffer
+    default_image_buffer = None
+    if os.path.exists(default_image_path):
+        with open(default_image_path, "rb") as default_image_file:
+            default_image_buffer = io.BytesIO(default_image_file.read())
+            default_image_buffer.seek(0)
+
     for sku, _ in sku_positions:
-        ruta_imagen_sku = os.path.join(ruta_imagenes, f"{sku}.jpeg")
-        if not os.path.exists(ruta_imagen_sku):
-            ruta_default = './default.jpeg'
-            if os.path.exists(ruta_default):
-                ruta_imagen = os.path.join(ruta_imagenes, f"{sku}.jpeg")
-                
-                # Copiar localmente la imagen predeterminada
-                with open(ruta_default, "rb") as f_default, open(ruta_imagen, "wb") as f_sku:
-                    default_image_bytes = f_default.read()
-                    f_sku.write(default_image_bytes)
-                print(f"Imagen predeterminada asignada al SKU {sku} localmente.")
-
-                # Subir la imagen predeterminada al bucket usando hilos
-                default_image_buffer = io.BytesIO(default_image_bytes)
+        # Verificar si la imagen ya fue subida
+        image_name = f"{sku}.jpeg"
+        if not any(upload[2] == image_name for upload in uploads):
+            if default_image_buffer:
+                print(f"Asignando imagen predeterminada al SKU {sku}.")
                 with ThreadPoolExecutor() as executor:
-                    #executor.submit(st.upload_image_buffer, bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
-                    executor.submit(bucket_name, bucket_folder, f"{sku}.jpeg", default_image_buffer)
-                print(f"Imagen predeterminada asignada y subida para el SKU {sku}.")
-
+                    executor.submit(
+                        st.upload_image_buffer,
+                        bucket_name,
+                        bucket_folder,
+                        image_name,
+                        io.BytesIO(default_image_buffer.getvalue())  # Crear un nuevo buffer para cada subida
+                    )
             else:
-                print(f"Imagen predeterminada no encontrada.")
+                print(f"Imagen predeterminada no encontrada para SKU {sku}.")
 
 def get_default_image_buffer_from_local(default_image_path="./default.jpeg"):
     try:
@@ -306,34 +324,89 @@ def get_urls(page):
     links = page.get_links()
     urls_with_rect = []
 
-    # Extraer URL y Rect de cada link y almacenar en lista de tuplas
+    # Extract URL and Rect from each link and store in a list of tuples
     for link in links:
         if 'uri' in link and 'from' in link:
             url = link['uri']
             rect = link['from']
-            coordenadas = [rect[0], rect[1], rect[2], rect[3]]
-            urls_with_rect.append((url, coordenadas))
+            coordinates = [rect[0], rect[1], rect[2], rect[3]]
+            urls_with_rect.append((url, coordinates))
 
-    # Ordenar los URLs basados en las coordenadas rectangulares (x, y)
+    # Sort the URLs based on rectangular coordinates (x, y)
     urls_sorted = sorted(urls_with_rect, key=lambda x: (x[1][1], x[1][0]))
 
-    # Extraer solo los URLs ya ordenados
-    urls_sor = [url for url, _ in urls_sorted]
-    for url in urls_sor:
-        urls.append(url)
+    # Extract only the sorted URLs
+    urls_sorted = [url for url, _ in urls_sorted]
 
-def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket):   
+    # Iterate through each SKU and match with URLs
+    for i in range(len(skus)):
+        sku = skus[i]
+        original_url = urls_sorted[i] if i < len(urls_sorted) else None
+        matched_url = None
+
+        for url in urls_sorted:
+            if sku in url:
+                matched_url = url
+                break
+
+        # If no matched URL found, use the original URL instead of "dummy-url"
+        if not matched_url:
+            matched_url = original_url if original_url else "dummy-url"
+
+        urls.append(matched_url)
+
+def obtener_imagenes_bucket(bucket_name, carpeta_imagenes_bucket):
+    """
+    Obtiene una lista de todas las imágenes en una carpeta específica del bucket.
+    """
+    client = st.initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blobs = bucket.list_blobs(prefix=carpeta_imagenes_bucket)
+    return {blob.name.split('/')[-1] for blob in blobs if blob.name.endswith('.jpeg')}
+
+def tiene_imagenes_en_bucket(skus, imagenes_existentes):
+    """
+    Valida en lote si los SKUs tienen imágenes en el bucket.
+    """
+    return {sku: f"{sku}.jpeg" in imagenes_existentes for sku in skus}
+
+
+def guardar_informacion_a_elasticsearch(
+    name_file, data, bucket_name, carpeta_documentos_correcciones_bucket, 
+    carpeta_documentos_elastic_bucket, carpeta_imagenes_bucket, imagenes_existentes
+):   
     # Generar el contenido del archivo como una cadena
     contenido_txt = "\n".join(data)
 
     # Validar si la URL contiene el SKU y si la imagen existe
     sku = data[0].replace("Sku: ", "")
     url = data[-1].replace("Url: ", "")
-    imagen_existe = tiene_imagen(sku)
+    imagen_existe = f"{sku}.jpeg" in imagenes_existentes
     subtitulo = data[2]
+    categoria = data[1].replace("Categoria:", "").strip().lower()  # Remover "Categoria:" y espacios en blanco
 
-    # Si la URL no coincide con el SKU o no existe la imagen, guardar en 'correcciones' en lugar de subir a Elasticsearch
-    if sku not in url or not imagen_existe or subtitulo.startswith("Producto: Promoción"):
+    # Definir la estructura requerida
+    estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:"]
+
+    # Expresión regular para validar el formato de "Pago semanal"
+    pago_semanal_pattern = re.compile(
+        r'Pago semanal: \$?\d+ x \d+ semanas \$?\d+(,\d{3})* de pago inicial|Pago semanal: \d+ \$ x \d+ semanas con \d+% de enganche'
+    )
+
+    # Verificar si el producto cumple con la estructura requerida
+    def cumple_estructura(data):
+        for campo in estructura_requerida:
+            if not any(campo in item for item in data):
+                return False
+        return True
+
+    # Validaciones para enviar a correcciones
+    if (
+        subtitulo.startswith("Producto: Promoción") or 
+        (not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria) or 
+        not categoria or  # Validar si la categoría está vacía después de quitar espacios
+        (categoria != "planes" and not any(pago_semanal_pattern.match(line) for line in data))  # Validar estructura de "Pago semanal" si no es "planes"
+    ):
         guardar_en_correcciones(name_file, contenido_txt, bucket_name, carpeta_documentos_correcciones_bucket)
         print(f"'{name_file}.txt' guardado en 'correcciones' debido a validación fallida.")
         return
@@ -348,23 +421,11 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
     }
     tasks.append(("elasticsearch", documento, name_file))
 
-    # Guardar el archivo localmente
-    downloads_folder = get_downloads_folder()
-    ruta_output_files = os.path.join(downloads_folder, 'documentos_elastic')
-    
-    if not os.path.exists(ruta_output_files):
-        os.makedirs(ruta_output_files)
-
-    file_path = os.path.join(ruta_output_files, f"{name_file}.txt")
-    with open(file_path, 'w', encoding='utf-8') as file:
-        file.write(contenido_txt)
-
     # Subida al bucket en la carpeta documentos_elastic
     buffer = io.BytesIO(contenido_txt.encode('utf-8'))
     buffer.seek(0)  # Asegurarse de que el buffer esté al inicio
     tasks.append(("storage", bucket_name, carpeta_documentos_elastic_bucket, f"{name_file}.txt", buffer))
 
-    # Ejecutar las subidas en paralelo
     # Ejecutar las subidas en paralelo
     with ThreadPoolExecutor() as executor:
         futures = []
@@ -372,12 +433,10 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
         for task in tasks:
             if task[0] == "elasticsearch":
                 documento, name_file = task[1], task[2]
-                #futures.append(executor.submit(es.indexar_documento, "catalogo", name_file, documento))
-                futures.append(executor.submit("catalogo", name_file, documento))
+                futures.append(executor.submit(es.indexar_documento, "elektra-docs", name_file, documento))
             elif task[0] == "storage":
                 _, bucket, folder, filename, buffer = task
-                #futures.append(executor.submit(st.upload_text_buffer, bucket, folder, filename, buffer))
-                futures.append(executor.submit(bucket, folder, filename, buffer))
+                futures.append(executor.submit(st.upload_text_buffer, bucket_name, folder, filename, buffer))
 
         # Verificar y manejar posibles errores en las subidas
         for future in futures:
@@ -388,55 +447,21 @@ def guardar_informacion_a_elasticsearch(name_file, data, bucket_name, carpeta_do
 
     print(f'Se subió "{name_file}.txt" a Elasticsearch y almacenamiento exitosamente.')
 
-def tiene_imagen(sku):
-    # Verifica si existe una imagen para el SKU
-    extensiones_imagen = ['jpeg']
-    downloads_folder = get_downloads_folder()
-    ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
-    for ext in extensiones_imagen:
-        if os.path.exists(f"{ruta_imagenes}/{sku}.{ext}"):
-            return True
-    return False
-
 from concurrent.futures import ThreadPoolExecutor
 import io
 import os
 
 def guardar_en_correcciones(name_file, contenido, bucket_name, carpeta_documentos_correcciones_bucket):
-    # Obtener la carpeta de descargas del usuario
-    downloads_folder = get_downloads_folder()
-    ruta_correcciones = os.path.join(downloads_folder, 'correcciones')
-    
-    if not os.path.exists(ruta_correcciones):
-        os.makedirs(ruta_correcciones)
-
-    # Ruta completa para guardar el archivo localmente
-    file_path = os.path.join(ruta_correcciones, f"{name_file}.txt")
-    
     # Crear un buffer para la subida a storage
     buffer = io.BytesIO(contenido.encode('utf-8'))
     buffer.seek(0)  # Asegurar que el buffer esté al inicio
 
-    # Definir las tareas de guardado local y subida en paralelo
-    def guardar_local():
-        with open(file_path, 'w', encoding='utf-8') as file:
-            file.write(contenido)
-        print(f"'{name_file}.txt' guardado en 'correcciones' para revisión.")
-
-    def subir_a_storage():
-        #st.upload_text_buffer(bucket_name, carpeta_documentos_correcciones_bucket, f"{name_file}.txt", buffer)
-        print(f"'{name_file}.txt' también subido a storage en 'correcciones'.")
-
-    # Ejecutar las tareas en paralelo usando ThreadPoolExecutor
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(guardar_local), executor.submit(subir_a_storage)]
-
-        # Manejar posibles errores en ambas tareas
-        for future in futures:
-            try:
-                future.result()
-            except Exception as e:
-                print(f"Error al ejecutar tarea: {e}")
+    try:
+        # Subir directamente al bucket
+        st.upload_text_buffer(bucket_name, carpeta_documentos_correcciones_bucket, f"{name_file}.txt", buffer)
+        print(f"'{name_file}.txt' guardado exitosamente en el bucket '{carpeta_documentos_correcciones_bucket}'.")
+    except Exception as e:
+        print(f"Error al guardar '{name_file}.txt' en el bucket: {e}")
 
 def guardar_informacion_a_discovery(titulo, name_file, data):
     # Reemplazar espacios con guiones bajos
@@ -471,20 +496,30 @@ def guardar_informacion_a_discovery(titulo, name_file, data):
 def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
-    
-    # Obtener la carpeta de descargas del usuario
-    downloads_folder = get_downloads_folder()
+    buffer_categoria = ""
+    archivos_finales = []  # Lista para almacenar los archivos finales
 
-    # Crear la carpeta 'pdfs_finales' dentro de la carpeta Descargas si no existe
-    ruta_pdfs_finales = os.path.join(downloads_folder, 'pdfs_finales')
-    if not os.path.exists(ruta_pdfs_finales):
-        os.makedirs(ruta_pdfs_finales)
+    # Eliminar hipervínculos de todas las páginas
+    for page_num in range(doc.page_count):
+        page = doc[page_num]
+        links = page.get_links()
+        for link in links:
+            page.delete_link(link)  # Elimina cada hipervínculo encontrado en la página
 
+    # Guardar el PDF sin hipervínculos en un buffer temporal
+    cleaned_pdf_buffer = io.BytesIO()
+    doc.save(cleaned_pdf_buffer)
+    cleaned_pdf_buffer.seek(0)
+
+    # Volver a abrir el PDF limpio para particionar
+    doc = fitz.open(stream=cleaned_pdf_buffer, filetype="pdf")
+
+    # Procesar cada página del PDF
     for num_page in range(doc.page_count):
         # Crear un nuevo PDF con solo una página
         doc_pagina = fitz.open()
         doc_pagina.insert_pdf(doc, from_page=num_page, to_page=num_page)
-        
+
         # Extraer el nombre de la categoría de la página
         page = doc.load_page(num_page)
         categoria = extraer_categoria(page)
@@ -494,24 +529,61 @@ def particion_pdf(pdf_buffer, bucket_name, bucket_folder):
 
         # Nombre del archivo para la página basado en la categoría
         nombre_archivo_pdf = f"{nombre_categoria_sanitizado}.pdf"
-        
-        # Guardar localmente en la carpeta 'pdfs_finales'
-        ruta_local_pdf = os.path.join(ruta_pdfs_finales, nombre_archivo_pdf)
-        doc_pagina.save(ruta_local_pdf)
-        print(f"Página {num_page + 1} guardada como {ruta_local_pdf}")
-        
-        # Crear un buffer de bytes para almacenar el PDF en memoria
-        pdf_buffer_output = io.BytesIO()
-        doc_pagina.save(pdf_buffer_output)
-        pdf_buffer_output.seek(0)  # Regresar al inicio del buffer
 
-        # Subir el PDF al bucket directamente desde el buffer
-        #st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_buffer_output)
-        print(f"PDF {nombre_archivo_pdf} subido exitosamente al bucket.")
+        # Guardar el PDF de una página en un buffer
+        pdf_page_buffer = io.BytesIO()
+        doc_pagina.save(pdf_page_buffer)
+        pdf_page_buffer.seek(0)
+
+        # Subir el archivo PDF directamente al bucket
+        st.upload_pdf_buffer(bucket_name, bucket_folder, nombre_archivo_pdf, pdf_page_buffer)
+        print(f"Página {num_page + 1} subida como {nombre_archivo_pdf} al bucket '{bucket_folder}'.")
+
+        # Si la categoría es "nombre_temporal", combinar con el archivo anterior
+        if nombre_categoria_sanitizado == "nombre_temporal" and buffer_categoria:
+            nombre_anterior = f"{buffer_categoria}.pdf"
+            join_pdfs_in_bucket(bucket_name, bucket_folder, nombre_anterior, nombre_archivo_pdf)
+        else:
+            buffer_categoria = nombre_categoria_sanitizado
 
         doc_pagina.close()
 
     doc.close()
+
+
+def join_pdfs_in_bucket(bucket_name, bucket_folder, first_pdf_name, second_pdf_name):
+    """
+    Combina dos PDFs en el bucket directamente y reemplaza el primero con el archivo combinado.
+    """
+    try:
+        # Descargar los dos PDFs desde el bucket
+        first_pdf_buffer = st.download_pdf_buffer(bucket_name, bucket_folder, first_pdf_name)
+        second_pdf_buffer = st.download_pdf_buffer(bucket_name, bucket_folder, second_pdf_name)
+
+        # Abrir los buffers como documentos de fitz
+        doc1 = fitz.open(stream=first_pdf_buffer, filetype="pdf")
+        doc2 = fitz.open(stream=second_pdf_buffer, filetype="pdf")
+
+        # Insertar el contenido del segundo documento en el primero
+        doc1.insert_pdf(doc2)
+
+        # Guardar el archivo combinado en un buffer
+        combined_pdf_buffer = io.BytesIO()
+        doc1.save(combined_pdf_buffer)
+        combined_pdf_buffer.seek(0)
+
+        # Subir el archivo combinado al bucket, sobrescribiendo el primero
+        st.upload_pdf_buffer(bucket_name, bucket_folder, first_pdf_name, combined_pdf_buffer)
+        print(f"PDFs combinados y guardados como {first_pdf_name} en el bucket.")
+
+        # Eliminar el segundo archivo del bucket
+        st.delete_file(bucket_name, f"{bucket_folder}/{second_pdf_name}")
+
+    except Exception as e:
+        print(f"Error al combinar PDFs {first_pdf_name} y {second_pdf_name}: {e}")
+
+# Lista global para almacenar las categorías extraídas
+categorias_extraidas = []
 
 def extraer_categoria(page):
     # Lógica para extraer el nombre de la categoría desde la página
@@ -527,14 +599,44 @@ def extraer_categoria(page):
 
                     # Verificar si el texto coincide con el nombre de la categoría
                     if nombre_de_categoria(text_size, text_flags):
+                        # Añadir la categoría detectada a la lista
+                        categorias_extraidas.append(text)
                         return text
     return "Categoria_Desconocida"
+
+
+def join_pdfs(first_pdf_path, second_pdf_path):
+    if not os.path.exists(first_pdf_path) or not os.path.exists(second_pdf_path):
+        print(f"Uno de los archivos PDF no existe: {first_pdf_path}, {second_pdf_path}")
+        return
+
+    try:
+        doc1 = fitz.open(first_pdf_path)
+        doc2 = fitz.open(second_pdf_path)
+
+        # Insertar el contenido del segundo documento en el primero
+        doc1.insert_pdf(doc2)
+
+        # Guardar los cambios en un archivo temporal primero
+        temp_path = "temp_file.pdf"
+        doc1.save(temp_path, incremental=False)  # Guardar sin modo incremental
+        doc1.close()
+        doc2.close()
+
+        # Eliminar el archivo original y mover el temporal al lugar correcto
+        os.remove(second_pdf_path)
+        os.replace(temp_path, first_pdf_path)
+        print(f"El PDF combinado ha sido guardado sobre: {first_pdf_path}")
+
+    except Exception as e:
+        print(f"Error al combinar PDFs: {e}")
+
 
 def sanitizar_nombre_categoria(categoria):
     # Reemplazar solo los caracteres no válidos, mantener los espacios y convertirlos a guiones bajos
     categoria_sanitizada = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', categoria).strip()
+
     nombre_con_guiones_bajos = unidecode(categoria_sanitizada).replace(" ", "_")
-    
     # Si hay varios guiones bajos, cortar en el primer guión bajo
     nombre_final = nombre_con_guiones_bajos.split('_')[0]
     
@@ -543,6 +645,10 @@ def sanitizar_nombre_categoria(categoria):
         nombre_final = "Home_Audio"
     elif nombre_final == "Linea":
         nombre_final = "Linea_Blanca"
+    elif nombre_final == "Nuevas":
+        nombre_final = "Nuevas_Categorias"
+    elif not nombre_final:
+        return "nombre_temporal"
     
     return nombre_final
 
@@ -560,9 +666,28 @@ def ajustar_longitudes_listas():
     # Ajustar también la lista 'nueva_data_productos' para que coincida
     nueva_data_productos.extend([["", "", "", "", "", "", ""]] * (max_length - len(nueva_data_productos)))
 
-def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket):
+ultima_categoria = "Categoria: null" 
+
+def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_bucket, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_reportes_bucket ):
+    nueva_data_productos.clear()
+    imagenes_existentes = obtener_imagenes_bucket(bucket_name, carpeta_imagenes_bucket)
     # Abre el PDF desde el buffer en memoria
     doc = fitz.open(stream=pdf_buffer, filetype="pdf")
+
+    # Eliminar hipervínculos de todas las páginas
+    for page_num in range(doc.page_count):
+        page = doc[page_num]
+        links = page.get_links()
+        for link in links:
+            page.delete_link(link)  # Elimina cada hipervínculo encontrado en la página
+    
+    # Guardar el PDF sin hipervínculos en un buffer temporal
+    cleaned_pdf_buffer = io.BytesIO()
+    doc.save(cleaned_pdf_buffer)
+    cleaned_pdf_buffer.seek(0)
+
+    # Procesar el PDF sin hipervínculos
+    doc = fitz.open(stream=cleaned_pdf_buffer, filetype="pdf")
 
     for page_num in range(doc.page_count):
         page = doc.load_page(page_num)
@@ -579,7 +704,8 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
         sku_positions = extraer_informacion(page)
 
         if len(titulos) == 0 or len(info) == 0:
-            break
+            print(f"No se encontró información en la página {page_num + 1}. Continuando con la siguiente página.")
+            continue
 
         get_urls(page)
 
@@ -592,6 +718,9 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             subtitulo = subtitulos[i] if i < len(subtitulos) else ""
             datos_producto = info[i] if i < len(info) else ""
             subtitulo = subtitulo.replace('con hasta', '')
+
+            #if titulos[0] == "50%":
+                #titulos[0] = "Línea Blanca"
 
             if titulos[0] == "Planes":
                 subtitulo = re.sub(r'^.*?Llévate un', '', subtitulo).strip()
@@ -648,6 +777,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 if match and titulos[0] != 'Planes':
                     subtitulo = f"Producto: {subtitulo} {match.group(1).strip()}"
                     datos_producto = datos_producto.replace(match.group(1), "").strip()
+                    subtitulo = subtitulo.replace('$ ', '')
                 elif titulos[0] == "Planes":
                     subtitulo = f"Producto: {subtitulo}"
                     datos_producto = datos_producto
@@ -661,25 +791,56 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                     datos_producto = datos_producto.replace('descuento', 'descuento\nPago de contado:')
                 if 'abono semanal' in datos_producto or 'Abono semanal' in datos_producto:
                     datos_producto = datos_producto.replace('abono semanal', 'abono semanal\nPago de contado:')
+                
+                if titulos[0] == "Cómputo":
+                    datos_producto = re.sub(r"\s?L L É V A T E  B O C I N A D E  R E G A L O !\s?", "", datos_producto).strip()
+                    datos_producto = datos_producto.replace("¡", "").replace("!", "").strip()
+                    datos_producto = datos_producto.replace("¡ B O C I N A  D E  R E G A L O !", "").strip()
+                    datos_producto = datos_producto.replace("B O C I N A  D E  R E G A L O", "").strip()
+                    datos_producto = datos_producto.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
+                    subtitulo = subtitulo.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
+                    subtitulo = subtitulo.replace("L L É V A T E  B O C I N A", "").strip()
 
                 # Asignar el contenido modificado
                 content = f"{datos_producto}"
+                if titulos[0] == "Equipos":
+                    # Eliminar bonos de regalo transversales del campo "Pago semanal"
+                    datos_producto = re.sub(r'Bono de regalo transversal.*?\.', '', datos_producto).strip()
+                    datos_producto = re.sub(r'\$1,000\.', '', datos_producto).strip()
+
+                    # Ajuste del campo "Pago semanal" para asegurar el formato correcto
+                    datos_producto = re.sub(
+                        r"(\$\d{1,3}(?:,\d{3})*)\s+(\$\d{1,3}(?:,\d{3})*)\s+\+\s+semanales",
+                        r"\1 + \2 semanales",
+                        datos_producto
+                    )
+                    datos_producto = re.sub(
+                        r"\$(\d+)\s+\+\s+semanales te llevas un accesorio o un cargador\s+\$(\d{1,3}(?:,\d{3})*)",
+                        r"$\2 + $\1 semanales te llevas un accesorio o un cargador",
+                        datos_producto
+                    )
+
+                # Patrón para el formato de pago semanal
+                datos_producto = datos_producto.replace("¡ B O C I N A  D E  R E G A L O !", "").strip()
+                datos_producto = datos_producto.replace("+ T A B L E T  D E  R E G A L O ", "").strip()
 
                 # Patrón para el formato de pago semanal
                 pago_semanal_pattern = re.compile(r'(\$?\d+)\s*x\s*(\d+)\s*semanas\s*(\$\d{1,3}(?:,\d{3})*)\s*de\s*pago\s*inicial\s*(\d+)(.*)')
-            
-                # Buscar y reemplazar el formato de pago semanal
+
+                # Aplicar el patrón y verificar coincidencia en el texto limpio
                 match = pago_semanal_pattern.search(datos_producto)
                 if match:
-                    cantidad4 = match.group(4)  # Se usa cantidad4 en lugar de cantidad1
-                    semanas = match.group(2)
-                    pago_inicial = match.group(3)
-                    texto_adicional = match.group(5).strip()
+                    # Extraer los valores según el patrón
+                    cantidad4 = match.group(4)  # Monto de pago semanal
+                    semanas = match.group(2)     # Número de semanas
+                    pago_inicial = match.group(3)  # Pago inicial
+                    texto_adicional = match.group(5).strip()  # Cualquier texto adicional
 
-                    # Verificar si el texto adicional contiene "Descuento"
+                    # Verificar si hay un descuento en el texto adicional y formatear el mensaje
                     if 'Descuento' in texto_adicional or 'descuento' in texto_adicional:
                         texto_adicional = f"\nDescuento: {texto_adicional}"
 
+                    # Formatear el texto final con el patrón deseado
                     nuevo_texto = f"${cantidad4} x {semanas} semanas {pago_inicial} de pago inicial"
                     datos_producto = datos_producto.replace(match.group(0), nuevo_texto + texto_adicional)
                     content = f"Pago semanal: {datos_producto}"
@@ -693,21 +854,56 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
                 elif re.search(r'pago inicial \d+', datos_producto):
                     datos_producto = re.sub(r'(pago inicial \d+)', r'\1\nDescuento:', datos_producto)
                     content = f"Pago semanal: {datos_producto}"
-            
+                
+                subtitulo = re.sub(r"¡ B O C I N A  D E  R E G A L O !.*", "", subtitulo).strip()
+                subtitulo = subtitulo.replace("S E G U N D A  P I E Z A H A S T A  - 7 0 %  E N  A B O N O %", "").strip()
+                subtitulo = subtitulo.replace("S E G U N D A  P I E Z A H A S T A  - 6 0 %  E N  A B O N O %", "").strip()
+                # Expresión regular para eliminar "¡ B O N O  D E  R E G A L O  D E  1 , 0 0 0 * !" y todo lo que sigue
+                subtitulo = re.sub(r"¡\s*B\s*O\s*N\s*O\s*D\s*E\s*R\s*E\s*G\s*A\s*L\s*O\s*D\s*E\s*1\s*,\s*0\s*0\s*0\s*\*\s*!.*", "", subtitulo).strip()
+
+                if titulos[0] == "Equipos":
+                    subtitulo = subtitulo.replace("L L É V A T E  X I A O M I  R E D M I  A 3 D E  R E G A L O !", "").strip()
+                    # Extraer características del producto como '* Cámara 12+12 Mpx Memoria: 128 GB'
+                    caracteristicas_pattern = re.compile(r'\* Cámara\s+\d+\+\d+(?:\+\d+)?\s+Mpx\s+Memoria:\s+\d+\s+GB')
+                    caracteristicas = caracteristicas_pattern.search(datos_producto)
+                    
+                    if caracteristicas:
+                        caracteristicas_texto = caracteristicas.group(0)
+                        # Eliminar las características del campo "Pago semanal"
+                        datos_producto = datos_producto.replace(caracteristicas_texto, '').strip()
+                        # Agregar las características al nombre del producto
+                        subtitulo = f"{subtitulo} {caracteristicas_texto}"
+                        subtitulo = subtitulo.replace("*", "").strip()
+                        
+                    content = f"Pago semanal: {datos_producto}"
+
             # Restante de las asignaciones
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip()}" if titulos else ""
+            ultima_categoria = "Categoria: null" 
+            if categoria == "Categoria: ":
+                categoria = ultima_categoria  # Usar la última categoría válida
+            else:
+                ultima_categoria = categoria
+
+            categoria = categoria.replace("Paquete", "").strip()
+            if categoria == 'Categoria: Planes':
+                # Extrae el valor correcto para el pago semanal
+                content = re.sub(r'\$\d+\s*(\d+\s*\$\s*semanales)', r'Pago: \1', content)
+
+                # Asegúrate de que "Incluye:" esté en una nueva línea, en caso de estar seguido
+                content = re.sub(r'(?<=semanales)\s*Incluye:', r'\nIncluye:', content)
             #cupon = cupones[i] if i < len(cupones) else "Sin Cupones"
 
             if sku:
                 sku_num = "Sku: " + sku
-                url_line = f"Url: {url}"
-                data = [sku_num, categoria, subtitulo, content, vigencia, url_line]
-                nueva_data_productos.append([sku_num, categoria, subtitulo, content, vigencia, url_line])
+                #url_line = f"Url: {url}"
+                data = [sku_num, categoria, subtitulo, content, vigencia]
+                nueva_data_productos.append([sku_num, categoria, subtitulo, content, vigencia])
                 #guardar_informacion_a_discovery(titulos[0], f"{sku} {url}", data)
-                guardar_informacion_a_elasticsearch(f"{sku}", data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket)
-                
-    generar_reporte_excel_general()
+                guardar_informacion_a_elasticsearch(f"{sku}", data, bucket_name, carpeta_documentos_correcciones_bucket, carpeta_documentos_elastic_bucket, carpeta_imagenes_bucket, imagenes_existentes)
+    print(categorias_extraidas)
+    generar_reporte_excel_general_optimizado(bucket_name, carpeta_reportes_bucket, carpeta_imagenes_bucket)
 
 def get_downloads_folder():
     # Obtener la carpeta de descargas según el sistema operativo
@@ -716,37 +912,38 @@ def get_downloads_folder():
     else:  # macOS y Linux
         return str(Path.home() / 'Downloads')
 
-def generar_reporte_excel_general():
+def limpiar_caracteres_especiales(texto):
+    # Eliminar caracteres no imprimibles excepto saltos de línea, caracteres acentuados, $, %, /, comillas dobles, comillas dobles de cierre y el símbolo +
+    return re.sub(r'[^a-zA-Z0-9áéíóúÁÉÍÓÚüÜñÑ.,;:!?()\[\]{}<>\-\n $%/""”+]+', '', texto)
+
+def generar_reporte_excel_general_optimizado(bucket_name, carpeta_reportes_bucket, carpeta_imagenes_bucket):
     # Extraer SKU y URL directamente desde `nueva_data_productos`
     skus = [data[0].replace("Sku: ", "") for data in nueva_data_productos]
     urls = [data[-1].replace("Url: ", "") for data in nueva_data_productos]  # Asume que el último campo es la URL
 
     # Crear la data en un DataFrame para todas las categorías en `nueva_data_productos`
-    nueva_data_formateada = ['\n'.join(data) for data in nueva_data_productos]
+    nueva_data_formateada = [limpiar_caracteres_especiales('\n'.join(data)) for data in nueva_data_productos]
     df = pd.DataFrame({
-        'SKU': skus,  
-        'URL': urls,  
-        'Nueva Data Producto': nueva_data_formateada  
+        'SKU': skus,
+        'URL': urls,
+        'Nueva Data Producto': nueva_data_formateada
     })
 
     # Asegurarse de que tanto la columna 'SKU' como 'URL' sean de tipo string
     df['SKU'] = df['SKU'].astype(str).str.strip()
     df['URL'] = df['URL'].astype(str).str.strip()
 
-    # Crear una columna para verificar si el SKU está contenido en la URL
-    df['URL Coincide con SKU'] = [sku in url for sku, url in zip(df['SKU'], df['URL'])]
+    # Obtener la lista de imágenes del bucket en una sola operación
+    client = st.initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blobs = list(bucket.list_blobs(prefix=carpeta_imagenes_bucket))
+    image_set = {blob.name.split('/')[-1] for blob in blobs if blob.name.endswith('.jpeg')}
 
-    # Añadir una columna que indique si el SKU tiene una imagen asociada
-    def tiene_imagen(sku):
-        extensiones_imagen = ['jpeg']
-        downloads_folder = get_downloads_folder()
-        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
-        for ext in extensiones_imagen:
-            if os.path.exists(f"{ruta_imagenes}/{sku}.{ext}"):
-                return True
-        return False
+    # Función optimizada para verificar existencia de imágenes
+    def tiene_imagen_optimizado(sku):
+        return f"{sku}.jpeg" in image_set
 
-    df['Tiene Imagen'] = df['SKU'].apply(tiene_imagen)
+    df['Tiene Imagen'] = df['SKU'].apply(tiene_imagen_optimizado)
 
     # Definir la carpeta de descargas y el nombre del archivo consolidado
     downloads_folder = get_downloads_folder()
@@ -759,81 +956,84 @@ def generar_reporte_excel_general():
     workbook = load_workbook(nombre_archivo_excel)
     sheet = workbook.active
 
-    # Ajustar el ancho de las columnas "SKU", "URL Coincide con SKU" y "Tiene Imagen"
-    col_sku = 1
-    col_url_coincide = sheet.max_column - 1
-    col_tiene_imagen = sheet.max_column 
+    # Ajustar el ancho de las columnas principales
+    sheet.column_dimensions['A'].width = 30  # SKU
+    sheet.column_dimensions['C'].width = 90  # Nueva Data Producto
 
-    sheet.column_dimensions[sheet.cell(row=1, column=col_sku).column_letter].width = 30 
-    sheet.column_dimensions[sheet.cell(row=1, column=col_url_coincide).column_letter].width = 30
-    sheet.column_dimensions[sheet.cell(row=1, column=col_tiene_imagen).column_letter].width = 30
-
-    # Ajustar el ancho de la columna de "Nueva Data Producto" para que sea 3 veces más ancho
-    col_nueva_data = 3
-    sheet.column_dimensions[sheet.cell(row=1, column=col_nueva_data).column_letter].width = 90 
-
-    # Añadir imágenes a una nueva columna al final
+    # Añadir imágenes desde el bucket en una nueva columna
     col_img = sheet.max_column + 1
     sheet.cell(row=1, column=col_img).value = "Imagen"
 
-    # Añadir imágenes en la nueva columna para cada SKU en df
-    for index, sku in enumerate(df['SKU'], start=2):
-        imagen_path = None
-        extensiones_imagen = ['jpeg']
-        ruta_imagenes = os.path.join(downloads_folder, 'imagenes')
+    def descargar_y_agregar_imagen(sku, fila):
+        image_name = f"{sku}.jpeg"
+        if image_name in image_set:
+            image_buffer = st.download_image_from_bucket(bucket_name, carpeta_imagenes_bucket, image_name)
+            if image_buffer:
+                img = ExcelImage(image_buffer)
+                img.width = 100
+                img.height = 100
+                sheet.row_dimensions[fila].height = img.height * 0.75
+                img_anchor = sheet.cell(row=fila, column=col_img).coordinate
+                sheet.add_image(img, img_anchor)
 
-        for ext in extensiones_imagen:
-            imagen_path = f"{ruta_imagenes}/{sku}.{ext}"
-            if os.path.exists(imagen_path):
-                break
+    # Procesar imágenes en paralelo
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [
+            executor.submit(descargar_y_agregar_imagen, sku, index + 2)
+            for index, sku in enumerate(df['SKU'])
+        ]
+        for future in futures:
+            future.result()
 
-        if imagen_path and os.path.exists(imagen_path):
-            img = ExcelImage(imagen_path)
-            img.width = 100
-            img.height = 100
-            fila = index
-            sheet.row_dimensions[fila].height = img.height * 0.75 
-            img_anchor = sheet.cell(row=fila, column=col_img).coordinate 
-            sheet.add_image(img, img_anchor)
-
-    # Aplicar formato condicional para resaltar en rojo las celdas con "False" en las columnas "URL Coincide con SKU" y "Tiene Imagen"
+    # Aplicar formato condicional para resaltar en rojo las celdas con "False" en "Tiene Imagen"
     red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
-
-    # Columna "URL Coincide con SKU"
-    for row in sheet.iter_rows(min_row=2, min_col=col_url_coincide, max_col=col_url_coincide, max_row=sheet.max_row):
+    for row in sheet.iter_rows(min_row=2, min_col=4, max_col=4, max_row=sheet.max_row):  # Columna 'Tiene Imagen'
         for cell in row:
-            if cell.value == False:
+            if not cell.value:
                 cell.fill = red_fill
 
-    # Columna "Tiene Imagen"
-    for row in sheet.iter_rows(min_row=2, min_col=col_tiene_imagen, max_col=col_tiene_imagen, max_row=sheet.max_row):
-        for cell in row:
-            if cell.value == False:
-                cell.fill = red_fill
     # Marcar los SKUs duplicados en color naranja
     orange_fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")
-
-    # Identificar duplicados en la columna SKU
-    sku_column = sheet['A'][1:]  # Column A, excluding header
+    sku_column = sheet['A'][1:]  # Columna 'SKU', excluyendo el encabezado
     sku_values = [cell.value for cell in sku_column]
     duplicated_skus = {sku for sku in sku_values if sku_values.count(sku) > 1}
 
-    # Aplicar el color naranja a los duplicados
     for cell in sku_column:
         if cell.value in duplicated_skus:
             cell.fill = orange_fill
-    
-    # Marcar en amarillo las celdas de "Nueva Data Producto" si el subtítulo comienza con "Producto: Promoción"
-    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    col_nueva_data = 3  # Columna "Nueva Data Producto" (ajustar si está en otro índice)
 
-    for index, data in enumerate(nueva_data_productos, start=2):  # Comienza en la fila 2
-        subtitulo = data[2]  # Índice del subtítulo en `nueva_data_productos`
-        if subtitulo.startswith("Producto: Promoción"):
-            cell = sheet.cell(row=index, column=col_nueva_data)
+    # Marcar celdas con datos incorrectos en amarillo
+    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    estructura_requerida = ["Sku:", "Categoria:", "Producto:", "Pago semanal:", "Descuento:", "Pago de contado:", "Vigencia:"]
+
+    def cumple_estructura(data):
+        for campo in estructura_requerida:
+            if not any(campo in item for item in data):
+                return False
+        return True
+
+    pago_semanal_pattern = re.compile(
+        r'Pago semanal: \$?\d+ x \d+ semanas \$?\d+(,\d{3})* de pago inicial|Pago semanal: \d+ \$ x \d+ semanas con \d+% de enganche'
+    )
+
+    for index, data in enumerate(nueva_data_productos, start=2):
+        subtitulo = data[2]
+        categoria = data[1].replace("Categoria:", "").strip().lower()
+
+        if not categoria or subtitulo.startswith("Producto: Promoción") or (
+            not cumple_estructura(data) and "equipos" not in categoria and "planes" not in categoria
+        ) or (categoria != "planes" and not any(pago_semanal_pattern.search(line) for line in data)):
+            cell = sheet.cell(row=index, column=3)  # Columna 'Nueva Data Producto'
             cell.fill = yellow_fill
 
-
-    # Guardar el archivo Excel con todas las validaciones e imágenes insertadas
+    # Guardar el archivo Excel con validaciones e imágenes insertadas
     workbook.save(nombre_archivo_excel)
     print(f"Reporte consolidado guardado en {nombre_archivo_excel}")
+
+    # Subir el archivo Excel al bucket
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    with open(nombre_archivo_excel, "rb") as excel_file:
+        excel_buffer = io.BytesIO(excel_file.read())
+        excel_buffer.seek(0)
+        st.upload_text_buffer(bucket_name, carpeta_reportes_bucket, f"reporte_{timestamp}.xlsx", excel_buffer)
+        print(f"El reporte de Excel '{nombre_archivo_excel}' ha sido subido exitosamente al bucket '{bucket_name}/{carpeta_reportes_bucket}'.")

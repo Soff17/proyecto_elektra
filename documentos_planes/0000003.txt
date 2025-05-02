@@ -1,0 +1,6 @@
+Sku: 0000003
+Categoria: Planes
+Producto: Plan Ligero
+Pago: 30 $ semanales 
+Incluye: Hasta 1.5 GB para navegar. Con tu pago 250 MB + pago puntual .75 GB + Portabilidad/Renovación + .5 GB. Redes sociales incluidas, llamadas y mensajes ilimitados.
+Vigencia: 19 al 21 de noviembre de 2024.

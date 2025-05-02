@@ -1,3 +1,4 @@
+import io
 import os
 from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor
@@ -8,7 +9,7 @@ def initialize_storage_client():
     if not json_path:
         raise ValueError("La ruta del archivo JSON no está definida en el archivo .env")
     
-    client = storage.Client.from_service_account_json('/Users/sofiadonlucas/Desktop/Visual/NDS/Nuevo/proyecto_elektra_2/quotes-381505-09ca05ec8b5e.json')
+    client = storage.Client.from_service_account_json(json_path)
     return client
 
 # Función para vaciar la carpeta de imagenes_subidas en lugar de todo el bucket
@@ -31,6 +32,22 @@ def upload_image(client, bucket_name, file_path, blob_name):
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(file_path)
+
+def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
+    client = initialize_storage_client()
+    file_paths = [
+        os.path.join(folder_path, filename)
+        for filename in os.listdir(folder_path)
+        if filename.lower().endswith('.jpeg') and os.path.isfile(os.path.join(folder_path, filename))
+    ]
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [
+            executor.submit(upload_image, client, bucket_name, file_path, f'{bucket_folder_name}/{os.path.basename(file_path)}')
+            for file_path in file_paths
+        ]
+        for future in futures:
+            future.result()
 
 # Función para subir múltiples imágenes concurrentemente
 def upload_images_in_folder(bucket_name, folder_path, bucket_folder_name):
@@ -171,3 +188,92 @@ def upload_text_buffer(bucket_name, folder_name, file_name, text_buffer):
     blob = bucket.blob(f'{folder_name}/{file_name}')
     blob.upload_from_file(text_buffer, content_type='text/plain')
     print(f"El archivo de texto '{file_name}' fue subido exitosamente al bucket '{bucket_name}/{folder_name}'.")
+
+def upload_file(bucket_name, folder_name, file_path):
+    """
+    Subir un archivo genérico al bucket de Google Cloud Storage.
+    
+    :param bucket_name: Nombre del bucket en GCP.
+    :param folder_name: Carpeta dentro del bucket donde se subirá el archivo.
+    :param file_path: Ruta del archivo local a subir.
+    """
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob_name = f"{folder_name}/{os.path.basename(file_path)}"
+    blob = bucket.blob(blob_name)
+    blob.upload_from_filename(file_path)
+    print(f"Archivo '{os.path.basename(file_path)}' subido exitosamente a '{bucket_name}/{folder_name}'.")
+
+def download_image_from_bucket(bucket_name, folder_name, image_name):
+    """
+    Descarga una imagen desde el bucket de Google Cloud Storage como un buffer.
+    """
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(f"{folder_name}/{image_name}")
+
+    if blob.exists():
+        image_buffer = io.BytesIO()
+        blob.download_to_file(image_buffer)
+        image_buffer.seek(0)
+        print(f"Imagen '{image_name}' descargada exitosamente del bucket '{bucket_name}/{folder_name}'.")
+        return image_buffer
+    else:
+        print(f"Imagen '{image_name}' no encontrada en el bucket '{bucket_name}/{folder_name}'.")
+        return None
+
+def image_exists_in_bucket(bucket_name, folder_name, image_name):
+    """
+    Verifica si una imagen existe en el bucket de Google Cloud Storage.
+    """
+    client = initialize_storage_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(f"{folder_name}/{image_name}")
+    return blob.exists()
+
+def download_pdf_buffer(bucket_name, folder, file_name):
+    """
+    Descarga un archivo PDF desde el bucket y lo devuelve como un buffer en memoria.
+    """
+    try:
+        client = initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+        blob_path = f"{folder}/{file_name}"
+        blob = bucket.blob(blob_path)
+
+        if not blob.exists():
+            raise FileNotFoundError(f"El archivo {blob_path} no existe en el bucket {bucket_name}.")
+
+        # Descargar el contenido del archivo al buffer
+        pdf_buffer = io.BytesIO()
+        blob.download_to_file(pdf_buffer)
+        pdf_buffer.seek(0)  # Asegurarse de que el buffer esté al inicio
+
+        print(f"Archivo {blob_path} descargado exitosamente desde el bucket {bucket_name}.")
+        return pdf_buffer
+
+    except Exception as e:
+        print(f"Error al descargar el archivo {file_name}: {e}")
+        raise
+
+def delete_file(bucket_name, file_path):
+    """
+    Elimina un archivo del bucket especificado.
+    
+    Args:
+        bucket_name (str): Nombre del bucket.
+        file_path (str): Ruta completa del archivo dentro del bucket.
+    """
+    try:
+        client = initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(file_path)
+
+        if blob.exists():
+            blob.delete()
+            print(f"Archivo '{file_path}' eliminado del bucket '{bucket_name}'.")
+        else:
+            print(f"Archivo '{file_path}' no encontrado en el bucket '{bucket_name}'.")
+    except Exception as e:
+        print(f"Error al eliminar el archivo '{file_path}' del bucket: {e}")
+        raise
