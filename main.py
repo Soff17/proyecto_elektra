@@ -29,6 +29,77 @@ carpeta_reportes_bucket = os.getenv('carpeta_reportes_bucket')
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+@app.route('/copiar_contenido_pdfs', methods=['POST'])
+def copiar_contenido_pdfs():
+    try:
+        # Verificar el token antes de proceder
+        verificar_token()
+
+        # Obtener datos del cuerpo de la solicitud
+        data = request.get_json()
+        destino_carpeta = data.get('destino_carpeta')
+
+        if not destino_carpeta:
+            return jsonify({"error": "Falta el parámetro 'destino_carpeta'"}), 400
+
+        client = st.initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+
+        # Paso 1: Vaciar la carpeta destino
+        st.empty_bucket_folder(bucket_name, destino_carpeta)
+
+        # Paso 2: Copiar archivos desde 'carpeta_pdfs_bucket' a 'destino_carpeta'
+        blobs = bucket.list_blobs(prefix=carpeta_pdfs_bucket)
+
+        for blob in blobs:
+            # Crear el nuevo nombre en la carpeta destino
+            destino_blob_name = blob.name.replace(carpeta_pdfs_bucket, destino_carpeta, 1)
+
+            # Copiar el archivo
+            bucket.copy_blob(blob, bucket, new_name=destino_blob_name)
+            print(f"Archivo '{blob.name}' copiado a '{destino_blob_name}'.")
+
+        return jsonify({"message": f"Contenido de '{carpeta_pdfs_bucket}' copiado exitosamente a '{destino_carpeta}'"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/copiar_contenido', methods=['POST'])
+def copiar_contenido():
+    try:
+        # Verificar el token antes de proceder
+        verificar_token()
+
+        # Obtener datos del cuerpo de la solicitud
+        data = request.get_json()
+        destino_carpeta = data.get('destino_carpeta')
+
+        if not destino_carpeta:
+            return jsonify({"error": "Falta el parámetro 'destino_carpeta'"}), 400
+
+        client = st.initialize_storage_client()
+        bucket = client.bucket(bucket_name)
+
+        # Paso 1: Vaciar la carpeta destino
+        st.empty_bucket_folder(bucket_name, destino_carpeta)
+
+        # Paso 2: Copiar archivos desde 'carpeta_imagenes_bucket' a 'destino_carpeta'
+        blobs = bucket.list_blobs(prefix=carpeta_imagenes_bucket)
+
+        for blob in blobs:
+            # Crear el nuevo nombre en la carpeta destino
+            destino_blob_name = blob.name.replace(carpeta_imagenes_bucket, destino_carpeta, 1)
+
+            # Copiar el archivo
+            bucket.copy_blob(blob, bucket, new_name=destino_blob_name)
+            print(f"Archivo '{blob.name}' copiado a '{destino_blob_name}'.")
+
+        return jsonify({"message": f"Contenido de '{carpeta_imagenes_bucket}' copiado exitosamente a '{destino_carpeta}'"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # Endpoint para descargar arhcivos pdf almacenados en GCP
 @app.route('/descargar_pdfs', methods=['POST'])
 def descargar_todos_pdfs():

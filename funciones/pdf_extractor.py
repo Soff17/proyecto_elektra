@@ -433,7 +433,7 @@ def guardar_informacion_a_elasticsearch(
         for task in tasks:
             if task[0] == "elasticsearch":
                 documento, name_file = task[1], task[2]
-                futures.append(executor.submit(es.indexar_documento, "catalogo", name_file, documento))
+                futures.append(executor.submit(es.indexar_documento, "elektra-docs", name_file, documento))
             elif task[0] == "storage":
                 _, bucket, folder, filename, buffer = task
                 futures.append(executor.submit(st.upload_text_buffer, bucket_name, folder, filename, buffer))
@@ -880,6 +880,7 @@ def procesar_pdf(pdf_buffer, bucket_name, carpeta_imagenes_bucket, carpeta_pdfs_
             # Restante de las asignaciones
             url = urls[i] if i < len(urls) else f"{page_num}_Dummy{i}"
             categoria = f"Categoria: {re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúÑñ\s]', '', titulos[0]).strip()}" if titulos else ""
+            ultima_categoria = "Categoria: null" 
             if categoria == "Categoria: ":
                 categoria = ultima_categoria  # Usar la última categoría válida
             else:
